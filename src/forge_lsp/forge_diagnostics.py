@@ -256,7 +256,6 @@ class ForgeOutputParser:
                 # Extract message from rendered field (format: "note[code]: message")
                 rendered_clean = clean_ansi_sequences(rendered)
                 # Look for pattern like "note[code]: actual message"
-                import re
                 match = re.match(r'note\[[^\]]+\]:\s*(.+?)(?:\n|$)', rendered_clean)
                 if match:
                     message = match.group(1).strip()
