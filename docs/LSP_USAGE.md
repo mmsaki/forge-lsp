@@ -168,10 +168,10 @@ Run the included test scripts to verify functionality:
 
 ```bash
 # Test basic functionality
-python3 test_lsp_server.py
+python3 tests/test_lsp_server.py
 
 # Test error detection
-python3 test_error_diagnostics.py
+python3 tests/test_error_diagnostics.py
 ```
 
 ## Architecture

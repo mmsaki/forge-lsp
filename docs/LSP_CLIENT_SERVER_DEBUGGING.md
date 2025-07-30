@@ -523,7 +523,7 @@ python3 compare_messages.py
 
 4. **Verify message processing**:
    ```python
-   python3 debug_lint_parsing.py
+   python3 tests/debug_lint_parsing.py
    ```
 
 ### Scenario 2: Malformed Diagnostic Messages
@@ -546,7 +546,7 @@ python3 compare_messages.py
 
 3. **Verify message processing**:
    ```python
-   python3 test_message_cleanup.py
+   python3 tests/test_message_cleanup.py
    ```
 
 ### Scenario 3: Performance Issues
@@ -562,7 +562,7 @@ python3 compare_messages.py
 
 2. **Check cache effectiveness**:
    ```python
-   python3 test_cache_functionality.py
+   python3 tests/test_cache_functionality.py
    ```
 
 3. **Monitor system resources**:

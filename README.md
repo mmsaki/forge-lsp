@@ -197,6 +197,16 @@ export FORGE_LSP_LOG_LEVEL=DEBUG
 forge-lsp --debug
 ```
 
+## Documentation
+
+For detailed information about using and developing with Forge LSP, see the documentation in the `docs/` directory:
+
+- **[Usage Guide](docs/USAGE.md)** - Basic usage and configuration
+- **[LSP Usage](docs/LSP_USAGE.md)** - LSP-specific features and editor integration
+- **[Testing and Debugging](docs/TESTING_AND_DEBUGGING.md)** - Comprehensive testing and debugging guide
+- **[LSP Client-Server Debugging](docs/LSP_CLIENT_SERVER_DEBUGGING.md)** - Advanced debugging techniques
+- **[Remapping System](docs/REMAPPING_SYSTEM.md)** - Foundry remapping system for LSP
+
 ## Contributing
 
 Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.

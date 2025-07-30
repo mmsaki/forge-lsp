@@ -235,11 +235,11 @@ case "${1:-}" in
             setup_environment
             
             run_test "message_cleanup" \
-                "python3 test_message_cleanup.py" \
+                "python3 tests/test_message_cleanup.py" \
                 "Testing lint message cleanup and formatting"
             
             run_test "lint_analysis" \
-                "python3 test_lint_message_analysis.py" \
+                "python3 tests/test_lint_message_analysis.py" \
                 "Testing comprehensive lint message analysis"
             
             echo "📊 Quick Test Results: $TESTS_PASSED/$TESTS_RUN passed"

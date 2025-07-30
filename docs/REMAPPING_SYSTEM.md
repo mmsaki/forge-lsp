@@ -174,7 +174,7 @@ foundry-project/
 Run the test script to verify functionality:
 
 ```bash
-python test_remapping.py
+python tests/test_remapping.py
 ```
 
 This will test:

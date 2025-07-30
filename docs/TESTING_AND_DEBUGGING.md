@@ -28,13 +28,13 @@ pip install -r requirements.txt  # or use uv
 
 ```bash
 # Test basic diagnostics functionality
-python3 test_forge_diagnostics.py
+python3 tests/test_forge_diagnostics.py
 
 # Test message cleanup and formatting
-python3 test_message_cleanup.py
+python3 tests/test_message_cleanup.py
 
 # Test comprehensive lint message analysis
-python3 test_lint_message_analysis.py
+python3 tests/test_lint_message_analysis.py
 ```
 
 ## Diagnostic Message Testing
@@ -44,7 +44,7 @@ python3 test_lint_message_analysis.py
 **Purpose**: Verify that linting messages are properly cleaned and formatted with original content.
 
 ```bash
-python3 test_message_cleanup.py
+python3 tests/test_message_cleanup.py
 ```
 
 **Expected Output**:
@@ -77,7 +77,7 @@ Found 2 diagnostics:
 **Purpose**: Deep analysis of raw vs processed lint messages to ensure completeness.
 
 ```bash
-python3 test_lint_message_analysis.py
+python3 tests/test_lint_message_analysis.py
 ```
 
 **Expected Output**:
@@ -110,7 +110,7 @@ Processed message: '[forge lint] constants should use SCREAMING_SNAKE_CASE'
 **Purpose**: Step-by-step debugging of the lint parsing pipeline.
 
 ```bash
-python3 debug_lint_parsing.py
+python3 tests/debug_lint_parsing.py
 ```
 
 **What it shows**:
@@ -195,7 +195,7 @@ EOF
 Test diagnostic caching functionality:
 
 ```bash
-python3 test_cache_functionality.py
+python3 tests/test_cache_functionality.py
 ```
 
 **What it tests**:
@@ -283,7 +283,7 @@ asyncio.run(test())
 ### 2. Cache Performance Test
 
 ```bash
-python3 test_cache_functionality.py
+python3 tests/test_cache_functionality.py
 ```
 
 ### 3. Memory Usage Test
@@ -337,22 +337,22 @@ When investigating lint message issues:
 
 2. **Test manual parsing**:
    ```bash
-   python3 debug_lint_parsing.py
+   python3 tests/debug_lint_parsing.py
    ```
 
 3. **Check full pipeline**:
    ```bash
-   python3 test_message_cleanup.py
+   python3 tests/test_message_cleanup.py
    ```
 
 4. **Analyze differences**:
    ```bash
-   python3 test_lint_message_analysis.py
+   python3 tests/test_lint_message_analysis.py
    ```
 
 5. **Verify in LSP context**:
    ```bash
-   python3 test_lsp_server.py
+   python3 tests/test_lsp_server.py
    ```
 
 ## Environment Variables
@@ -382,16 +382,16 @@ echo "🧪 Running Forge LSP Test Suite"
 echo "================================"
 
 echo "📋 Testing message cleanup..."
-python3 test_message_cleanup.py || exit 1
+python3 tests/test_message_cleanup.py || exit 1
 
 echo "🔍 Testing lint message analysis..."
-python3 test_lint_message_analysis.py || exit 1
+python3 tests/test_lint_message_analysis.py || exit 1
 
 echo "⚡ Testing cache functionality..."
-python3 test_cache_functionality.py || exit 1
+python3 tests/test_cache_functionality.py || exit 1
 
 echo "🏗️  Testing forge diagnostics..."
-python3 test_forge_diagnostics.py || exit 1
+python3 tests/test_forge_diagnostics.py || exit 1
 
 echo "✅ All tests passed!"
 ```
