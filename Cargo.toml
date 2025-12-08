@@ -1,0 +1,17 @@
+[package]
+name = "forge-lsp"
+description = "Language Server Protocol implementation for Solidity"
+version = "0.0.1"
+edition = "2024"
+license = "MIT"
+
+[dependencies]
+tower-lsp = "0.20"
+tokio = { version = "1.48.0", features = ["full"] }
+serde = "1.0.228"
+serde_json = "1.0.145"
+thiserror = "2.0.17"
+clap = { version = "4.0", features = ["derive"] }
+eyre = "0.6"
+tracing = "0.1"
+tempfile = "3.0"
