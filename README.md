@@ -16,12 +16,8 @@ forge-lsp --stdio
 
 - [x] forge lint errors
 - [x] Diagnostics (compilation errors and warnings)
-- [ ] Go-to-definition
-- [ ] Symbol search and references
-- [ ] Code completion
-- [ ] Hover information
-- [ ] Code formatting
-- [ ] Code Actions
+- [x] Go-to-definition
+- [x] Symbol search and references
 
 ## Development
 
