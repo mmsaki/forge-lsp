@@ -12,7 +12,7 @@ forge-lsp --stdio
 
 ## Supported LSP Features
 
-### Planned
+### Features
 
 - [x] forge lint errors
 - [x] Diagnostics (compilation errors and warnings)
