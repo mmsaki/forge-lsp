@@ -2,6 +2,14 @@
 
 A native Language Server Protocol (LSP) implementation for Solidity development using Foundry's compilation and linting infrastructure.
 
+## Install
+
+Install binary from crates.io
+
+```sh
+cargo install forge-lsp
+```
+
 ## Usage
 
 Start the LSP server using:
@@ -9,8 +17,6 @@ Start the LSP server using:
 ```bash
 forge-lsp --stdio
 ```
-
-## Supported LSP Features
 
 ### Features
 
@@ -35,8 +41,6 @@ cargo test
 
 ### VSCode or Cursor
 
-> Install forge nightly with `foundryup -i nightly` to access forge lint feature
-
 You can add the following to VSCode (or cursor) using a lsp-proxy extension see comment [here](https://github.com/foundry-rs/foundry/pull/11187#issuecomment-3148743488):
 
 ```json
@@ -47,23 +51,18 @@ You can add the following to VSCode (or cursor) using a lsp-proxy extension see 
     "fileExtensions": [
       ".sol"
     ],
-    "args": [
-      "--stdio"
-    ]
   }
 ]
 ```
 
 ### Neovim
 
-> Install forge nightly with `foundryup -i nightly` to access forge lint feature
-
 If you have neovim 0.11+ installed add these to your config
 
 ```lua
 -- lsp/forge_lsp.lua
 return {
-  cmd = { "forge-lsp", "--stdio" },
+  cmd = { "forge-lsp" },
   filetypes = { "solidity" },
   root_markers = { "foundry.toml", ".git" },
   root_dir = vim.fs.root(0, { "foundry.toml", ".git" }),
