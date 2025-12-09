@@ -1,5 +1,7 @@
 use crate::utils::byte_offset_to_position;
+use std::fs;
 use std::path::Path;
+use std::process::Command;
 use tower_lsp::lsp_types::{Diagnostic, DiagnosticSeverity, NumberOrString, Position, Range};
 
 fn ignored_code_for_tests(value: &serde_json::Value) -> bool {
@@ -124,24 +126,30 @@ contract A {
     }
 }"#;
 
-    fn setup(contents: &str) -> (tempfile::TempPath, ForgeRunner) {
-        let mut tmp =
-            tempfile::Builder::new().suffix(".sol").tempfile().expect("failed to create temp file");
+    fn setup(contents: &str) -> (tempfile::TempDir, std::path::PathBuf, ForgeRunner) {
+        let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
 
-        tmp.write_all(contents.as_bytes()).expect("failed to write temp file");
-        tmp.flush().expect("flush failed");
-        tmp.as_file().sync_all().expect("sync failed");
+        let init_output = Command::new("forge")
+            .arg("init")
+            .arg("--no-commit")
+            .arg("--no-git")
+            .current_dir(&temp_dir)
+            .output()
+            .expect("failed to init forge");
 
-        let path = tmp.into_temp_path();
+        assert!(init_output.status.success(), "forge init failed");
+
+        let contract_path = temp_dir.path().join("src").join("Contract.sol");
+        std::fs::write(&contract_path, contents).expect("failed to write contract");
 
         let compiler = ForgeRunner;
-        (path, compiler)
+        (temp_dir, contract_path, compiler)
     }
 
     #[tokio::test]
     async fn test_build_success() {
-        let (tmp_file, compiler) = setup(CONTRACT);
-        let file_path = tmp_file.to_string_lossy().to_string();
+        let (temp_dir, contract_path, compiler) = setup(CONTRACT);
+        let file_path = temp_dir.path().to_string_lossy().to_string();
 
         let result = compiler.build(&file_path).await;
         assert!(result.is_ok(), "Expected build to succeed");
@@ -149,8 +157,8 @@ contract A {
 
     #[tokio::test]
     async fn test_build_has_errors_array() {
-        let (file_, compiler) = setup(CONTRACT);
-        let file_path = file_.to_string_lossy().to_string();
+        let (temp_dir, contract_path, compiler) = setup(CONTRACT);
+        let file_path = temp_dir.path().to_string_lossy().to_string();
 
         let json = compiler.build(&file_path).await.unwrap();
         assert!(json.get("errors").is_some(), "Expected 'errors' array in build output");
@@ -158,8 +166,8 @@ contract A {
 
     #[tokio::test]
     async fn test_build_error_formatting() {
-        let (file_, compiler) = setup(CONTRACT);
-        let file_path = file_.to_string_lossy().to_string();
+        let (temp_dir, contract_path, compiler) = setup(CONTRACT);
+        let file_path = temp_dir.path().to_string_lossy().to_string();
 
         let json = compiler.build(&file_path).await.unwrap();
         if let Some(errors) = json.get("errors")
@@ -171,15 +179,15 @@ contract A {
 
     #[tokio::test]
     async fn test_diagnostic_offsets_match_source() {
-        let (file_, compiler) = setup(CONTRACT);
-        let file_path = file_.to_string_lossy().to_string();
-        let source_code = tokio::fs::read_to_string(&file_path).await.expect("read source");
+        let (temp_dir, contract_path, compiler) = setup(CONTRACT);
+        let file_path = temp_dir.path().to_string_lossy().to_string();
+        let source_code = tokio::fs::read_to_string(&contract_path).await.expect("read source");
         let build_output = compiler.build(&file_path).await.expect("build failed");
         let expected_start_byte = 81;
         let expected_end_byte = 82;
         let expected_start_pos = byte_offset_to_position(&source_code, expected_start_byte);
         let expected_end_pos = byte_offset_to_position(&source_code, expected_end_byte);
-        let filename = std::path::Path::new(&file_path)
+        let filename = std::path::Path::new(&contract_path)
             .file_name()
             .and_then(|f| f.to_str())
             .expect("filename");
@@ -195,12 +203,12 @@ contract A {
 
     #[tokio::test]
     async fn test_build_output_to_diagnostics_from_file() {
-        let (file_, compiler) = setup(CONTRACT);
-        let file_path = file_.to_string_lossy().to_string();
+        let (temp_dir, contract_path, compiler) = setup(CONTRACT);
+        let file_path = temp_dir.path().to_string_lossy().to_string();
         let source_code =
-            tokio::fs::read_to_string(&file_path).await.expect("Failed to read source file");
+            tokio::fs::read_to_string(&contract_path).await.expect("Failed to read source file");
         let build_output = compiler.build(&file_path).await.expect("Compiler build failed");
-        let filename = std::path::Path::new(&file_path)
+        let filename = std::path::Path::new(&contract_path)
             .file_name()
             .and_then(|f| f.to_str())
             .expect("Failed to get filename");

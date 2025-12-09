@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
+use std::fs;
 use std::path::Path;
+use std::process::Command;
 use tower_lsp::lsp_types::{Diagnostic, DiagnosticSeverity, Position, Range};
 
 pub fn lint_output_to_diagnostics(
@@ -123,25 +125,30 @@ contract A {
     }
 }"#;
 
-    fn setup(contents: &str) -> (tempfile::NamedTempFile, ForgeRunner) {
-        let mut tmp = tempfile::Builder::new()
-            .prefix("A")
-            .suffix(".sol")
-            .tempfile_in(".")
-            .expect("failed to create temp file");
+    fn setup(contents: &str) -> (tempfile::TempDir, std::path::PathBuf, ForgeRunner) {
+        let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
 
-        tmp.write_all(contents.as_bytes()).expect("failed to write temp file");
-        tmp.flush().expect("flush failed");
-        tmp.as_file().sync_all().expect("sync failed");
+        let init_output = Command::new("forge")
+            .arg("init")
+            .arg("--no-commit")
+            .arg("--no-git")
+            .current_dir(&temp_dir)
+            .output()
+            .expect("failed to init forge");
+
+        assert!(init_output.status.success(), "forge init failed");
+
+        let contract_path = temp_dir.path().join("src").join("Contract.sol");
+        std::fs::write(&contract_path, contents).expect("failed to write contract");
 
         let compiler = ForgeRunner;
-        (tmp, compiler)
+        (temp_dir, contract_path, compiler)
     }
 
     #[tokio::test]
     async fn test_lint_valid_file() {
-        let (file_, compiler) = setup(CONTRACT);
-        let file_path = file_.path().to_string_lossy().to_string();
+        let (temp_dir, contract_path, compiler) = setup(CONTRACT);
+        let file_path = contract_path.to_string_lossy().to_string();
 
         let result = compiler.lint(&file_path).await;
         assert!(result.is_ok(), "Expected lint to succeed");
@@ -152,8 +159,8 @@ contract A {
 
     #[tokio::test]
     async fn test_lint_diagnosis_output() {
-        let (file_, compiler) = setup(CONTRACT);
-        let file_path = file_.path().to_string_lossy().to_string();
+        let (temp_dir, contract_path, compiler) = setup(CONTRACT);
+        let file_path = contract_path.to_string_lossy().to_string();
 
         let result = compiler.lint(&file_path).await;
         assert!(result.is_ok());
@@ -165,8 +172,8 @@ contract A {
 
     #[tokio::test]
     async fn test_lint_to_lsp_diagnostics() {
-        let (file_, compiler) = setup(CONTRACT);
-        let file_path = file_.path().to_string_lossy().to_string();
+        let (temp_dir, contract_path, compiler) = setup(CONTRACT);
+        let file_path = contract_path.to_string_lossy().to_string();
 
         let result = compiler.lint(&file_path).await;
         assert!(result.is_ok(), "Expected lint to succeed");

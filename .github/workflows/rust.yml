@@ -24,6 +24,10 @@ jobs:
         # make Foundry tools available to subsequent steps
         echo "${HOME}/.foundry/bin" >> $GITHUB_PATH
         # ensure latest foundry toolchain is installed
-        foundryup || true
+        foundryup
+    - name: Verify Foundry installation
+      run: forge --version
     - name: Run tests
-      run: cargo test --verbose
+      run: |
+        export PATH="$PATH:$HOME/.foundry/bin"
+        cargo test --verbose
