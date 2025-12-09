@@ -18,5 +18,12 @@ jobs:
     - uses: actions/checkout@v4
     - name: Build
       run: cargo build --verbose
+    - name: Install Foundry (forge, anvil)
+      run: |
+        curl -L https://foundry.paradigm.xyz | bash
+        # make Foundry tools available to subsequent steps
+        echo "${HOME}/.foundry/bin" >> $GITHUB_PATH
+        # ensure latest foundry toolchain is installed
+        foundryup || true
     - name: Run tests
       run: cargo test --verbose
