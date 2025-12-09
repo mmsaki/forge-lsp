@@ -1,6 +1,8 @@
-# Language Server Protocol (`lsp`)
+# Solidity LSP
 
-A native Language Server Protocol (LSP) implementation for Solidity development using Foundry's compilation and linting infrastructure.
+A Language Server Protocol (LSP) implementation for Solidity development using Foundry's compilation and linting infrastructure.
+
+This work is a continuation from my [foundry-rs/foundry PR #11187](https://github.com/foundry-rs/foundry/pull/11187).
 
 ## Install
 
