@@ -1,9 +1,11 @@
 [package]
 name = "forge-lsp"
 description = "Language Server Protocol implementation for Solidity"
-version = "0.0.1"
+version = "0.0.2"
 edition = "2024"
 license = "MIT"
+homepage = "https://github.com/mmsaki/forge-lsp"
+repository = "https://github.com/mmsaki/forge-lsp"
 
 [dependencies]
 tower-lsp = "0.20"
