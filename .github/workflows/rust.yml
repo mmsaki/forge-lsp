@@ -5,10 +5,16 @@ on:
     branches: [ "main" ]
     paths:
         - "src/**"
+        - "testdata/**"
+        - "Cargo.toml"
+        - "Cargo.lock"
   pull_request:
     branches: [ "main" ]
     paths:
         - "src/**"
+        - "testdata/**"
+        - "Cargo.toml"
+        - "Cargo.lock"
 
 env:
   CARGO_TERM_COLOR: always
