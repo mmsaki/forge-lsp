@@ -10,8 +10,9 @@ fn ignored_code_for_tests(value: &serde_json::Value) -> bool {
         .and_then(|f| f.as_str())
         .unwrap_or_default();
 
-    // Ignore error code 5574 for test files (code size limit)
-    error_code == "5574" && (file_path.contains(".t.sol") || file_path.contains(".s.sol"))
+    // Ignore error code 5574, 3860 for test files (code size limit)
+    (error_code == "5574" && (file_path.contains(".t.sol") || file_path.contains(".s.sol"))) || (error_code == "3860" && (file_path.contains(".t.sol") || file_path.contains(".s.sol")))
+
 }
 
 pub fn build_output_to_diagnostics(
