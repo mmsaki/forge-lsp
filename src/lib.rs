@@ -11,6 +11,7 @@ pub mod goto;
 pub mod lint;
 pub mod lsp;
 pub mod references;
+pub mod rename;
 pub mod runner;
 pub mod utils;
 

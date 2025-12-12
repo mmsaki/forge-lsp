@@ -173,13 +173,6 @@ pub fn goto_references(
     let mut results = HashSet::new();
     results.extend(refs.iter().copied());
 
-    // For each reference, also get its references (transitive closure)
-    for ref_id in refs {
-        if let Some(transitive_refs) = all_refs.get(ref_id) {
-            results.extend(transitive_refs.iter().copied());
-        }
-    }
-
     // Convert node IDs to locations
     let mut locations = Vec::new();
     for id in results {

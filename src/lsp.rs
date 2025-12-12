@@ -1,5 +1,5 @@
 use crate::{
-    goto, references,
+    goto, references, rename,
     runner::{ForgeRunner, Runner},
 };
 use std::{collections::HashMap, sync::Arc};
@@ -132,6 +132,7 @@ impl LanguageServer for ForgeLsp {
                 definition_provider: Some(OneOf::Left(true)),
                 declaration_provider: Some(DeclarationCapability::Simple(true)),
                 references_provider: Some(OneOf::Left(true)),
+                rename_provider: Some(OneOf::Left(true)),
                 text_document_sync: Some(TextDocumentSyncCapability::Kind(
                     TextDocumentSyncKind::FULL,
                 )),
@@ -469,6 +470,98 @@ impl LanguageServer for ForgeLsp {
                 .log_message(MessageType::INFO, format!("Found {} references", locations.len()))
                 .await;
             Ok(Some(locations))
+        }
+    }
+
+    async fn rename(
+        &self,
+        params: RenameParams,
+    ) -> tower_lsp::jsonrpc::Result<Option<WorkspaceEdit>> {
+        self.client.log_message(MessageType::INFO, "Got a textDocument/rename request").await;
+
+        let uri = params.text_document_position.text_document.uri;
+        let position = params.text_document_position.position;
+        let new_name = params.new_name;
+
+        // Get the file path from URI
+        let file_path = match uri.to_file_path() {
+            Ok(path) => path,
+            Err(_) => {
+                self.client.log_message(MessageType::ERROR, "Invalid file URI").await;
+                return Ok(None);
+            }
+        };
+
+        // Read the source file
+        let source_bytes = match std::fs::read(&file_path) {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                self.client
+                    .log_message(MessageType::ERROR, format!("Failed to read file: {e}"))
+                    .await;
+                return Ok(None);
+            }
+        };
+
+        // Try to get AST data from cache first
+        let ast_data = {
+            let cache = self.ast_cache.read().await;
+            if let Some(cached_ast) = cache.get(&uri.to_string()) {
+                self.client.log_message(MessageType::INFO, "Using cached AST data").await;
+                cached_ast.clone()
+            } else {
+                // Cache miss - get AST data and cache it
+                drop(cache); // Release read lock
+
+                let path_str = match file_path.to_str() {
+                    Some(s) => s,
+                    None => {
+                        self.client.log_message(MessageType::ERROR, "Invalid file path").await;
+                        return Ok(None);
+                    }
+                };
+
+                match self.compiler.ast(path_str).await {
+                    Ok(data) => {
+                        self.client
+                            .log_message(MessageType::INFO, "Fetched and caching new AST data")
+                            .await;
+
+                        // Cache the new AST data
+                        let mut cache = self.ast_cache.write().await;
+                        cache.insert(uri.to_string(), data.clone());
+                        data
+                    }
+                    Err(e) => {
+                        self.client
+                            .log_message(MessageType::ERROR, format!("Failed to get AST: {e}"))
+                            .await;
+                        return Ok(None);
+                    }
+                }
+            }
+        };
+
+        // Use the rename_symbol function to handle the rename logic
+        match rename::rename_symbol(&ast_data, &uri, position, &source_bytes, new_name) {
+            Some(workspace_edit) => {
+                self.client
+                    .log_message(
+                        MessageType::INFO,
+                        format!(
+                            "Created rename edit with {} changes",
+                            workspace_edit.changes.as_ref()
+                                .map(|c| c.values().map(|v| v.len()).sum::<usize>())
+                                .unwrap_or(0)
+                        ),
+                    )
+                    .await;
+                Ok(Some(workspace_edit))
+            }
+            None => {
+                self.client.log_message(MessageType::INFO, "No locations found for renaming").await;
+                Ok(None)
+            }
         }
     }
 
