@@ -27,7 +27,10 @@ fn push_if_node_or_array<'a>(tree: &'a Value, key: &str, stack: &mut Vec<&'a Val
 
 pub fn cache_ids(
     sources: &Value,
-) -> (HashMap<String, HashMap<u64, NodeInfo>>, HashMap<String, String>) {
+) -> (
+    HashMap<String, HashMap<u64, NodeInfo>>,
+    HashMap<String, String>,
+) {
     let mut nodes: HashMap<String, HashMap<u64, NodeInfo>> = HashMap::new();
     let mut path_to_abs: HashMap<String, String> = HashMap::new();
 
@@ -39,8 +42,11 @@ pub fn cache_ids(
                 && let Some(ast) = source_file.get("ast")
             {
                 // Get the absolute path for this file
-                let abs_path =
-                    ast.get("absolutePath").and_then(|v| v.as_str()).unwrap_or(path).to_string();
+                let abs_path = ast
+                    .get("absolutePath")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(path)
+                    .to_string();
 
                 path_to_abs.insert(path.clone(), abs_path.clone());
 
@@ -312,15 +318,21 @@ pub fn goto_declaration(
     let first_build_info = build_infos.first()?;
     let id_to_path = first_build_info.get("source_id_to_path")?.as_object()?;
 
-    let id_to_path_map: HashMap<String, String> =
-        id_to_path.iter().map(|(k, v)| (k.clone(), v.as_str().unwrap_or("").to_string())).collect();
+    let id_to_path_map: HashMap<String, String> = id_to_path
+        .iter()
+        .map(|(k, v)| (k.clone(), v.as_str().unwrap_or("").to_string()))
+        .collect();
 
     let (nodes, path_to_abs) = cache_ids(sources);
     let byte_position = pos_to_bytes(source_bytes, position);
 
-    if let Some((file_path, location_bytes)) =
-        goto_bytes(&nodes, &path_to_abs, &id_to_path_map, file_uri.as_ref(), byte_position)
-    {
+    if let Some((file_path, location_bytes)) = goto_bytes(
+        &nodes,
+        &path_to_abs,
+        &id_to_path_map,
+        file_uri.as_ref(),
+        byte_position,
+    ) {
         // Read the target file to convert byte position to line/column
         let target_file_path = std::path::Path::new(&file_path);
 
@@ -337,13 +349,22 @@ pub fn goto_declaration(
         {
             return Some(Location {
                 uri: target_uri,
-                range: Range { start: target_position, end: target_position },
+                range: Range {
+                    start: target_position,
+                    end: target_position,
+                },
             });
         }
     }
 
     // Fallback to current position
-    Some(Location { uri: file_uri.clone(), range: Range { start: position, end: position } })
+    Some(Location {
+        uri: file_uri.clone(),
+        range: Range {
+            start: position,
+            end: position,
+        },
+    })
 }
 #[cfg(test)]
 mod tests {
@@ -425,7 +446,10 @@ mod tests {
 
         // Should find the declaration of the "name" parameter
         // Just verify we get a reasonable result within file bounds
-        assert!(location.range.start.line < 25, "Declaration should be within the file bounds");
+        assert!(
+            location.range.start.line < 25,
+            "Declaration should be within the file bounds"
+        );
     }
 
     #[test]
@@ -449,7 +473,10 @@ mod tests {
 
         // Should find the declaration of the "votes" state variable
         // Just verify we get a reasonable result within file bounds
-        assert!(location.range.start.line < 25, "Declaration should be within the file bounds");
+        assert!(
+            location.range.start.line < 25,
+            "Declaration should be within the file bounds"
+        );
     }
 
     #[test]
@@ -497,7 +524,10 @@ mod tests {
 
         // Should find the declaration of the "votes" state variable
         // Just verify we get a reasonable result within file bounds
-        assert!(location.range.start.line < 25, "Declaration should be within the file bounds");
+        assert!(
+            location.range.start.line < 25,
+            "Declaration should be within the file bounds"
+        );
     }
 
     #[test]
@@ -585,7 +615,11 @@ mod tests {
         let sources = ast_data.get("sources").unwrap();
         let build_infos = ast_data.get("build_infos").unwrap().as_array().unwrap();
         let first_build_info = build_infos.first().unwrap();
-        let id_to_path = first_build_info.get("source_id_to_path").unwrap().as_object().unwrap();
+        let id_to_path = first_build_info
+            .get("source_id_to_path")
+            .unwrap()
+            .as_object()
+            .unwrap();
 
         let id_to_path_map: HashMap<String, String> = id_to_path
             .iter()
@@ -601,7 +635,13 @@ mod tests {
 
         let file_uri_url = get_test_file_uri("testdata/C.sol");
         let file_uri = file_uri_url.as_str();
-        let result = goto_bytes(&nodes, &path_to_abs, &id_to_path_map, file_uri, byte_position);
+        let result = goto_bytes(
+            &nodes,
+            &path_to_abs,
+            &id_to_path_map,
+            file_uri,
+            byte_position,
+        );
 
         // Should find a declaration
         if let Some((file_path, _location_bytes)) = result {
@@ -634,7 +674,10 @@ mod tests {
 
         // Both should return the same location
         assert_eq!(declaration_location.uri, definition_location.uri);
-        assert_eq!(declaration_location.range.start.line, definition_location.range.start.line);
+        assert_eq!(
+            declaration_location.range.start.line,
+            definition_location.range.start.line
+        );
         assert_eq!(
             declaration_location.range.start.character,
             definition_location.range.start.character
@@ -662,11 +705,17 @@ mod tests {
 
         for (position, description) in test_positions {
             let result = goto_declaration(&ast_data, &file_uri, position, &source_bytes);
-            assert!(result.is_some(), "Failed to find definition for {description}");
+            assert!(
+                result.is_some(),
+                "Failed to find definition for {description}"
+            );
 
             let location = result.unwrap();
             // Verify we got a valid location
-            assert!(location.range.start.line < 100, "Invalid line number for {description}");
+            assert!(
+                location.range.start.line < 100,
+                "Invalid line number for {description}"
+            );
             assert!(
                 location.range.start.character < 1000,
                 "Invalid character position for {description}"
@@ -697,7 +746,10 @@ mod tests {
         }
 
         // Should have at least some nodes with name locations
-        assert!(nodes_with_name_location > 0, "Expected to find nodes with name locations");
+        assert!(
+            nodes_with_name_location > 0,
+            "Expected to find nodes with name locations"
+        );
     }
 
     #[test]
