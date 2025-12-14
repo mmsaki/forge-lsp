@@ -104,11 +104,11 @@ pub fn build_output_to_diagnostics(
     diagnostics
 }
 
-    #[cfg(test)]
-    mod tests {
-        use super::*;
-        use crate::runner::{ForgeRunner, Runner};
-        use std::fs;
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::runner::{ForgeRunner, Runner};
+    use std::fs;
 
     static CONTRACT: &str = r#"// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.29;
