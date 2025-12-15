@@ -44,54 +44,7 @@ fn get_identifier_at_position(source_bytes: &[u8], position: Position) -> Option
     Some(line[start..end].to_string())
 }
 
-/// Get the range of the identifier at the given position
-fn get_identifier_range_at_position(source_bytes: &[u8], position: Position) -> Option<Range> {
-    let text = String::from_utf8_lossy(source_bytes);
-    let lines: Vec<&str> = text.lines().collect();
 
-    if position.line as usize >= lines.len() {
-        return None;
-    }
-
-    let line = lines[position.line as usize];
-    if position.character as usize > line.len() {
-        return None;
-    }
-
-    // Find the word boundaries around the character position
-    let mut start = position.character as usize;
-    let mut end = position.character as usize;
-
-    // Move start backwards to find word start
-    while start > 0 && (line.as_bytes()[start - 1].is_ascii_alphanumeric() || line.as_bytes()[start - 1] == b'_') {
-        start -= 1;
-    }
-
-    // Move end forwards to find word end
-    while end < line.len() && (line.as_bytes()[end].is_ascii_alphanumeric() || line.as_bytes()[end] == b'_') {
-        end += 1;
-    }
-
-    if start == end {
-        return None; // No word found
-    }
-
-    // Check if it starts with a digit (not a valid identifier)
-    if line.as_bytes()[start].is_ascii_digit() {
-        return None;
-    }
-
-    Some(Range {
-        start: Position {
-            line: position.line,
-            character: start as u32,
-        },
-        end: Position {
-            line: position.line,
-            character: end as u32,
-        },
-    })
-}
 
 /// Adjust the range to cover only the specific identifier within the range text
 fn adjust_range_for_identifier(range: &Range, source_bytes: &[u8], identifier: &str) -> Option<Range> {
@@ -154,17 +107,8 @@ pub fn rename_symbol(
     let identifier = get_identifier_at_position(source_bytes, position)?;
 
     // Get all locations for renaming (declaration + references)
-    let mut locations = references::goto_references(ast_data, file_uri, position, source_bytes);
-
-    // Calculate the range for the identifier at the cursor position
-    let cursor_range = get_identifier_range_at_position(source_bytes, position)?;
-
-    // Add the cursor position as a location to rename
-    let cursor_location = tower_lsp::lsp_types::Location {
-        uri: file_uri.clone(),
-        range: cursor_range,
-    };
-    locations.push(cursor_location);
+    // This should already include the cursor position since we fixed goto_references
+    let locations = references::goto_references(ast_data, file_uri, position, source_bytes);
 
     if locations.is_empty() {
         return None;
@@ -407,5 +351,58 @@ mod tests {
 
         assert!(found_struct_decl, "Should rename the struct declaration");
         assert!(found_type_ref, "Should rename the type reference");
+    }
+
+    #[test]
+    fn test_rename_symbol_cursor_position_handling() {
+        let ast_data = match get_ast_data() {
+            Some(data) => data,
+            None => {
+                return;
+            }
+        };
+
+        let file_uri = get_test_file_uri("testdata/Reference.sol");
+        let source_bytes = std::fs::read("testdata/Reference.sol").unwrap();
+
+        // Test rename on "myValue" in the declaration (line 5: uint256 public myValue)
+        let position = Position::new(4, 13); // Position of "m" in "myValue"
+        let new_name = "newValue".to_string();
+        let result = rename_symbol(&ast_data, &file_uri, position, &source_bytes, new_name);
+
+        // Should return a workspace edit
+        assert!(result.is_some());
+        let workspace_edit = result.unwrap();
+
+        // Should have changes
+        assert!(workspace_edit.changes.is_some());
+        let changes = workspace_edit.changes.unwrap();
+
+        // Should have changes in the file
+        assert!(changes.contains_key(&file_uri));
+
+        let file_changes = &changes[&file_uri];
+        assert!(!file_changes.is_empty());
+
+        // Should have exactly 3 changes: declaration and 2 usages
+        assert_eq!(file_changes.len(), 3, "Should have 3 changes: declaration and 2 usages");
+
+        // All changes should have the new name
+        for text_edit in file_changes {
+            assert_eq!(text_edit.new_text, "newValue");
+            // Each range should cover "myValue" (7 characters)
+            let range_len = text_edit.range.end.character - text_edit.range.start.character;
+            assert_eq!(range_len, 7);
+        }
+
+        // Check that we have changes on the expected lines
+        let mut lines_with_changes: Vec<u32> = file_changes.iter()
+            .map(|edit| edit.range.start.line)
+            .collect();
+        lines_with_changes.sort();
+        lines_with_changes.dedup();
+
+        // Should have changes on lines 5 (declaration), 8 (setMyValue), and 12 (getMyValue)
+        assert_eq!(lines_with_changes, vec![4, 7, 11]);
     }
 }

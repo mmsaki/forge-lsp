@@ -163,8 +163,25 @@ pub fn goto_references(
         None => return vec![],
     };
 
-    // Get all references for this node
-    let refs = match all_refs.get(&node_id) {
+    // Determine the target node ID for finding references
+    // If this is a usage node, get its declaration; otherwise use the node itself
+    let target_node_id = {
+        let file_nodes = match nodes.get(abs_path) {
+            Some(nodes) => nodes,
+            None => return vec![],
+        };
+
+        if let Some(node_info) = file_nodes.get(&node_id) {
+            // If this node references a declaration, use the declaration as the target
+            // This ensures we get ALL references to the same symbol
+            node_info.referenced_declaration.unwrap_or(node_id)
+        } else {
+            node_id
+        }
+    };
+
+    // Get all references for the target node (declaration)
+    let refs = match all_refs.get(&target_node_id) {
         Some(r) => r,
         None => return vec![],
     };
@@ -172,6 +189,8 @@ pub fn goto_references(
     // Collect all related references
     let mut results = HashSet::new();
     results.extend(refs.iter().copied());
+    // Also include the target node itself (the declaration)
+    results.insert(target_node_id);
 
     // Convert node IDs to locations
     let mut locations = Vec::new();
@@ -230,6 +249,55 @@ mod tests {
             assert!(location.range.start.line < 100, "Reference line should be reasonable");
             assert!(!location.uri.as_str().is_empty(), "Reference URI should not be empty");
         }
+    }
+
+    #[test]
+    fn test_goto_references_from_usage_includes_all_references() {
+        let ast_data = match get_ast_data() {
+            Some(data) => data,
+            None => {
+                return;
+            }
+        };
+
+        let file_uri = get_test_file_uri("testdata/Reference.sol");
+        let source_bytes = std::fs::read("testdata/Reference.sol").unwrap();
+
+        // Test goto references from a usage of myValue (line 8: myValue = _value)
+        let position = Position::new(7, 8); // Position of "myValue" in assignment
+        let references_from_usage = goto_references(&ast_data, &file_uri, position, &source_bytes);
+
+        // Test goto references from the declaration of myValue (line 5: uint256 public myValue)
+        let position_declaration = Position::new(4, 13); // Position of "myValue" in declaration
+        let references_from_declaration = goto_references(&ast_data, &file_uri, position_declaration, &source_bytes);
+
+        // Both should return the same number of references (declaration + all usages)
+        assert_eq!(
+            references_from_usage.len(),
+            references_from_declaration.len(),
+            "References from usage and declaration should return the same count"
+        );
+
+        // Both should have at least 2 references (declaration + at least 1 usage)
+        assert!(
+            references_from_usage.len() >= 2,
+            "Should find at least declaration and one usage, found {}",
+            references_from_usage.len()
+        );
+
+        // The locations should be the same regardless of where we started
+        let usage_locations: std::collections::HashSet<_> = references_from_usage.iter()
+            .map(|loc| (loc.uri.as_str(), loc.range.start.line, loc.range.start.character))
+            .collect();
+        let declaration_locations: std::collections::HashSet<_> = references_from_declaration.iter()
+            .map(|loc| (loc.uri.as_str(), loc.range.start.line, loc.range.start.character))
+            .collect();
+
+        assert_eq!(
+            usage_locations,
+            declaration_locations,
+            "References from usage and declaration should return the same locations"
+        );
     }
 
     #[test]
