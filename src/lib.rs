@@ -13,6 +13,7 @@ pub mod lsp;
 pub mod references;
 pub mod rename;
 pub mod runner;
+pub mod symbols;
 pub mod utils;
 
 pub use lsp::ForgeLsp;

@@ -1,5 +1,5 @@
 use crate::{
-    goto, references, rename,
+    goto, references, rename, symbols,
     runner::{ForgeRunner, Runner},
     utils,
 };
@@ -183,6 +183,7 @@ impl LanguageServer for ForgeLsp {
                 declaration_provider: Some(DeclarationCapability::Simple(true)),
                 references_provider: Some(OneOf::Left(true)),
                 rename_provider: Some(OneOf::Left(true)),
+                workspace_symbol_provider: Some(OneOf::Left(true)),
                 text_document_sync: Some(TextDocumentSyncCapability::Kind(
                     TextDocumentSyncKind::FULL,
                 )),
@@ -781,6 +782,70 @@ impl LanguageServer for ForgeLsp {
                     .await;
                 Ok(None)
             }
+        }
+    }
+
+    async fn symbol(
+        &self,
+        params: WorkspaceSymbolParams,
+    ) -> tower_lsp::jsonrpc::Result<Option<Vec<SymbolInformation>>> {
+        self.client
+            .log_message(MessageType::INFO, "Got a workspace/symbol request")
+            .await;
+
+        // Get AST data from cache or build it
+        // For workspace symbols, we need to get AST data for all files
+        // Since we don't have a specific file, we'll need to build all files
+
+        // For now, let's try to get AST data by building the current directory
+        // This is a simplified approach - in a full implementation, we'd want to
+        // cache AST data for all files in the workspace
+
+        let current_dir = std::env::current_dir().ok();
+        let ast_data = if let Some(dir) = current_dir {
+            let path_str = dir.to_str().unwrap_or(".");
+            match self.compiler.ast(path_str).await {
+                Ok(data) => data,
+                Err(e) => {
+                    self.client
+                        .log_message(
+                            MessageType::WARNING,
+                            format!("Failed to get AST data for workspace symbols: {e}"),
+                        )
+                        .await;
+                    return Ok(None);
+                }
+            }
+        } else {
+            self.client
+                .log_message(MessageType::ERROR, "Could not get current directory")
+                .await;
+            return Ok(None);
+        };
+
+        let mut all_symbols = symbols::extract_symbols(&ast_data);
+
+        // Filter symbols based on query if provided
+        if !params.query.is_empty() {
+            let query = params.query.to_lowercase();
+            all_symbols.retain(|symbol| {
+                symbol.name.to_lowercase().contains(&query)
+            });
+        }
+
+        if all_symbols.is_empty() {
+            self.client
+                .log_message(MessageType::INFO, "No symbols found")
+                .await;
+            Ok(None)
+        } else {
+            self.client
+                .log_message(
+                    MessageType::INFO,
+                    format!("Found {} symbols", all_symbols.len()),
+                )
+                .await;
+            Ok(Some(all_symbols))
         }
     }
 
