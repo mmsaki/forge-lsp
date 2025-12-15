@@ -40,15 +40,14 @@ pub fn extract_document_symbols(ast_data: &Value, file_path: &str) -> Vec<Docume
     if let Some(sources) = ast_data.get("sources")
         && let Some(sources_obj) = sources.as_object() {
             for (path, contents) in sources_obj {
-                if path == file_path || path.ends_with(&format!("/{}", file_path)) || path.ends_with(file_path) {
-                    if let Some(contents_array) = contents.as_array()
-                        && let Some(first_content) = contents_array.first()
-                            && let Some(source_file) = first_content.get("source_file")
-                                && let Some(ast) = source_file.get("ast") {
-                                    let file_symbols = extract_document_symbols_from_ast(ast, file_path);
-                                    symbols.extend(file_symbols);
-                                }
-                }
+                if (path == file_path || path.ends_with(&format!("/{}", file_path)) || path.ends_with(file_path))
+                    && let Some(contents_array) = contents.as_array()
+                    && let Some(first_content) = contents_array.first()
+                    && let Some(source_file) = first_content.get("source_file")
+                    && let Some(ast) = source_file.get("ast") {
+                        let file_symbols = extract_document_symbols_from_ast(ast, file_path);
+                        symbols.extend(file_symbols);
+                    }
             }
         }
 
@@ -128,7 +127,7 @@ fn create_contract_document_symbol_with_children(node: &Value, file_path: &str) 
                         }
                     }
                     "EnumDefinition" => {
-                        if let Some(symbol) = create_enum_document_symbol(member_node, file_path) {
+                        if let Some(symbol) = create_enum_document_symbol_with_children(member_node, file_path) {
                             children.push(symbol);
                         }
                     }
@@ -139,6 +138,11 @@ fn create_contract_document_symbol_with_children(node: &Value, file_path: &str) 
                     }
                     "ErrorDefinition" => {
                         if let Some(symbol) = create_error_document_symbol(member_node, file_path) {
+                            children.push(symbol);
+                        }
+                    }
+                    "UsingForDirective" => {
+                        if let Some(symbol) = create_using_for_document_symbol(member_node, file_path) {
                             children.push(symbol);
                         }
                     }
@@ -195,13 +199,8 @@ fn create_function_document_symbol_with_children(node: &Value, file_path: &str) 
     let mut children = Vec::new();
 
     // Try different AST structures for parameters
-    let param_array = if let Some(params) = node.get("parameters").and_then(|p| p.get("parameters")).and_then(|p| p.as_array()) {
-        Some(params)
-    } else if let Some(params) = node.get("parameters").and_then(|p| p.as_array()) {
-        Some(params)
-    } else {
-        None
-    };
+    let param_array = node.get("parameters").and_then(|p| p.get("parameters")).and_then(|p| p.as_array())
+        .or_else(|| node.get("parameters").and_then(|p| p.as_array()));
 
     if let Some(parameters) = param_array {
         for param in parameters {
@@ -320,7 +319,33 @@ fn create_struct_member_document_symbol(node: &Value, file_path: &str) -> Option
     })
 }
 
-fn create_enum_document_symbol(node: &Value, file_path: &str) -> Option<DocumentSymbol> {
+fn create_enum_document_symbol_with_children(node: &Value, file_path: &str) -> Option<DocumentSymbol> {
+    let name = node.get("name").and_then(|v| v.as_str())?;
+    let range = get_node_range(node, file_path)?;
+
+    // Extract enum members as children
+    let mut children = Vec::new();
+    if let Some(members) = node.get("members").and_then(|v| v.as_array()) {
+        for member in members {
+            if let Some(member_symbol) = create_enum_member_document_symbol(member, file_path) {
+                children.push(member_symbol);
+            }
+        }
+    }
+
+    Some(DocumentSymbol {
+        name: name.to_string(),
+        detail: None,
+        kind: SymbolKind::STRUCT,
+        range,
+        selection_range: range,
+        children: if children.is_empty() { None } else { Some(children) },
+        tags: None,
+        deprecated: None,
+    })
+}
+
+fn create_enum_member_document_symbol(node: &Value, file_path: &str) -> Option<DocumentSymbol> {
     let name = node.get("name").and_then(|v| v.as_str())?;
     let range = get_node_range(node, file_path)?;
 
@@ -428,20 +453,18 @@ fn create_using_for_document_symbol(node: &Value, file_path: &str) -> Option<Doc
     name_parts.push("using".to_string());
 
     // Add library name if present
-    if let Some(library_name) = node.get("libraryName") {
-        if let Some(id) = library_name.get("name").and_then(|v| v.as_str()) {
+    if let Some(library_name) = node.get("libraryName")
+        && let Some(id) = library_name.get("name").and_then(|v| v.as_str()) {
             name_parts.push(id.to_string());
         }
-    }
 
     name_parts.push("for".to_string());
 
     // Add type name if present
-    if let Some(type_name) = node.get("typeName") {
-        if let Some(name_str) = extract_type_name(type_name) {
+    if let Some(type_name) = node.get("typeName")
+        && let Some(name_str) = extract_type_name(type_name) {
             name_parts.push(name_str);
         }
-    }
 
     let name = name_parts.join(" ");
 
@@ -501,13 +524,23 @@ fn create_import_document_symbol(node: &Value, file_path: &str) -> Option<Docume
 fn create_pragma_document_symbol(node: &Value, file_path: &str) -> Option<DocumentSymbol> {
     let range = get_node_range(node, file_path)?;
 
-    // Try to get the pragma content
+    // Extract a clean pragma name
     let name = if let Some(literals) = node.get("literals").and_then(|v| v.as_array()) {
-        let pragma_text = literals.iter()
+        let parts: Vec<String> = literals.iter()
             .filter_map(|v| v.as_str())
-            .collect::<Vec<_>>()
-            .join(" ");
-        format!("pragma {}", pragma_text)
+            .map(|s| s.trim().to_string()) // Trim spaces from each part
+            .collect();
+
+        if parts.len() >= 2 && parts[0] == "solidity" {
+            // For solidity pragmas, join all version parts without spaces
+            // e.g., ["solidity", "^0.8.0"] -> "solidity ^0.8.0"
+            // or ["solidity", ">=", "0.8.0", "<", "0.9.0"] -> "solidity >=0.8.0<0.9.0"
+            let version_parts: Vec<String> = parts[1..].to_vec();
+            format!("{} {}", parts[0], version_parts.join(""))
+        } else {
+            // For other pragmas, show the joined text
+            format!("pragma{}", parts.join(""))
+        }
     } else {
         "pragma".to_string()
     };
@@ -515,7 +548,7 @@ fn create_pragma_document_symbol(node: &Value, file_path: &str) -> Option<Docume
     Some(DocumentSymbol {
         name,
         detail: None,
-        kind: SymbolKind::NAMESPACE,
+        kind: SymbolKind::STRING, // Pragma directives are like string literals
         range,
         selection_range: range,
         children: None,
@@ -713,7 +746,7 @@ fn create_enum_symbol_info(node: &Value, file_path: &str) -> Option<SymbolInform
 
     Some(SymbolInformation {
         name: name.to_string(),
-        kind: SymbolKind::ENUM,
+        kind: SymbolKind::STRUCT,
         tags: None,
         deprecated: None,
         location,
@@ -831,5 +864,89 @@ mod tests {
         // Should have at least contracts and functions
         assert!(has_class, "Should have contract symbols");
         assert!(has_function, "Should have function symbols");
+    }
+
+    #[test]
+    fn test_extract_document_symbols_basic() {
+        let ast_data = match get_test_ast_data() {
+            Some(data) => data,
+            None => return,
+        };
+
+        let symbols = extract_document_symbols(&ast_data, "testdata/Simple.sol");
+
+        // Should find some symbols
+        assert!(!symbols.is_empty());
+
+        // Check that we have contracts
+        let contract_symbols: Vec<_> = symbols.iter()
+            .filter(|s| s.kind == SymbolKind::CLASS)
+            .collect();
+        assert!(!contract_symbols.is_empty(), "Should find at least one contract");
+
+        // Check that we have functions
+        let function_symbols: Vec<_> = symbols.iter()
+            .filter(|s| s.kind == SymbolKind::FUNCTION)
+            .collect();
+        assert!(!function_symbols.is_empty(), "Should find at least one function");
+    }
+
+    #[test]
+    fn test_document_symbol_kinds() {
+        let ast_data = match get_test_ast_data() {
+            Some(data) => data,
+            None => return,
+        };
+
+        let symbols = extract_document_symbols(&ast_data, "testdata/Simple.sol");
+
+        // Check that we have various symbol kinds
+        let has_class = symbols.iter().any(|s| s.kind == SymbolKind::CLASS);
+        let has_function = symbols.iter().any(|s| s.kind == SymbolKind::FUNCTION);
+        let _has_variable = symbols.iter().any(|s| s.kind == SymbolKind::VARIABLE || s.kind == SymbolKind::FIELD);
+        let _has_event = symbols.iter().any(|s| s.kind == SymbolKind::EVENT);
+        let _has_struct = symbols.iter().any(|s| s.kind == SymbolKind::STRUCT);
+        let _has_enum = symbols.iter().any(|s| s.kind == SymbolKind::ENUM);
+
+        // Should have at least contracts and functions
+        assert!(has_class, "Should have contract symbols");
+        assert!(has_function, "Should have function symbols");
+        // Other types may or may not be present depending on the test file
+    }
+
+    #[test]
+    fn test_enum_members_in_document_symbols() {
+        // Test with a file that has enums - we'll check if enum members are extracted
+        // This test will pass even if no enums exist, but verifies the logic works
+        let ast_data = match get_test_ast_data() {
+            Some(data) => data,
+            None => return,
+        };
+
+        // Check all files for enum symbols with children
+        let mut found_enum_with_members = false;
+        if let Some(sources) = ast_data.get("sources").and_then(|v| v.as_object()) {
+            for (path, _) in sources {
+                let symbols = extract_document_symbols(&ast_data, path);
+                for symbol in symbols {
+                    if symbol.kind == SymbolKind::STRUCT {
+                        if let Some(children) = &symbol.children {
+                            if !children.is_empty() {
+                                // Verify all children are enum values (shown as enums)
+                                let all_enum_values = children.iter().all(|c| c.kind == SymbolKind::ENUM);
+                                assert!(all_enum_values, "Enum children should all be enum values");
+                                found_enum_with_members = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // If we found enums with members, the test passes
+        // If no enums exist in test data, this is also fine
+        if found_enum_with_members {
+            println!("Found enum with members in test data");
+        }
     }
 }
