@@ -14,9 +14,9 @@ fn byte_offset(content: &str, position: Position) -> Result<usize, String> {
         return Err("Line out of range".to_string());
     }
     let mut offset = 0;
-    for i in 0..position.line as usize {
+    (0..position.line as usize).for_each(|i| {
         offset += lines[i].len() + 1; // +1 for \n
-    }
+    });
     offset += position.character as usize;
     if offset > content.len() {
         return Err("Character out of range".to_string());
