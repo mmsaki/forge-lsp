@@ -929,16 +929,14 @@ mod tests {
             for (path, _) in sources {
                 let symbols = extract_document_symbols(&ast_data, path);
                 for symbol in symbols {
-                    if symbol.kind == SymbolKind::STRUCT {
-                        if let Some(children) = &symbol.children {
-                            if !children.is_empty() {
+                    if symbol.kind == SymbolKind::STRUCT
+                        && let Some(children) = &symbol.children
+                            && !children.is_empty() {
                                 // Verify all children are enum values (shown as enums)
                                 let all_enum_values = children.iter().all(|c| c.kind == SymbolKind::ENUM);
                                 assert!(all_enum_values, "Enum children should all be enum values");
                                 found_enum_with_members = true;
                             }
-                        }
-                    }
                 }
             }
         }
