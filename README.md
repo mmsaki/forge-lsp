@@ -20,12 +20,78 @@ Start the LSP server using:
 forge-lsp --stdio
 ```
 
-### Features
+### LSP Features
 
-- [x] forge lint errors
-- [x] Diagnostics (compilation errors and warnings)
-- [x] Go-to-definition
-- [x] Symbol search and references
+#### Implemented ✅
+
+**Text Synchronization**
+- [x] `textDocument/didOpen` - Handle file opening
+- [x] `textDocument/didChange` - Handle file content changes
+- [x] `textDocument/didSave` - Handle file saving with diagnostics refresh
+- [x] `textDocument/didClose` - Handle file closing
+
+**Diagnostics**
+- [x] `textDocument/publishDiagnostics` - Publish compilation errors and warnings via `forge build`
+- [x] `textDocument/publishDiagnostics` - Publish linting errors and warnings via `forge lint`
+
+**Language Features**
+- [x] `textDocument/definition` - Go to definition
+- [x] `textDocument/declaration` - Go to declaration
+- [x] `textDocument/references` - Find all references
+- [x] `textDocument/documentSymbol` - Document symbol outline (contracts, functions, variables, events, structs, enums, etc.)
+- [x] `textDocument/rename` - Rename symbols across files
+
+**Workspace Features**
+- [x] `workspace/symbol` - Workspace-wide symbol search
+- [x] `workspace/didChangeConfiguration` - Acknowledges configuration changes (logs only)
+- [x] `workspace/didChangeWatchedFiles` - Acknowledges watched file changes (logs only)
+- [x] `workspace/didChangeWorkspaceFolders` - Acknowledges workspace folder changes (logs only)
+
+**General**
+- [x] `initialize` - Server initialization
+- [x] `initialized` - Server initialized notification
+- [x] `shutdown` - Server shutdown
+
+#### Not Implemented ❌
+
+**Language Features**
+- [ ] `textDocument/completion` - Code completion
+- [ ] `textDocument/hover` - Hover information
+- [ ] `textDocument/signatureHelp` - Function signature help
+- [ ] `textDocument/typeDefinition` - Go to type definition
+- [ ] `textDocument/implementation` - Go to implementation
+- [ ] `textDocument/documentHighlight` - Document highlighting
+- [ ] `textDocument/codeAction` - Code actions (quick fixes, refactoring)
+- [ ] `textDocument/codeLens` - Code lens
+- [ ] `textDocument/documentLink` - Document links
+- [ ] `textDocument/documentColor` - Color information
+- [ ] `textDocument/colorPresentation` - Color presentation
+- [ ] `textDocument/formatting` - Document formatting
+- [ ] `textDocument/rangeFormatting` - Range formatting
+- [ ] `textDocument/onTypeFormatting` - On-type formatting
+- [ ] `textDocument/prepareRename` - Prepare rename validation
+- [ ] `textDocument/foldingRange` - Folding ranges
+- [ ] `textDocument/selectionRange` - Selection ranges
+- [ ] `textDocument/semanticTokens` - Semantic tokens
+- [ ] `textDocument/semanticTokens/full` - Full semantic tokens
+- [ ] `textDocument/semanticTokens/range` - Range semantic tokens
+- [ ] `textDocument/semanticTokens/delta` - Delta semantic tokens
+
+**Workspace Features**
+- [ ] `workspace/executeCommand` - Execute workspace commands (stub implementation)
+- [ ] `workspace/applyEdit` - Apply workspace edits
+- [ ] `workspace/willCreateFiles` - File creation preview
+- [ ] `workspace/willRenameFiles` - File rename preview
+- [ ] `workspace/willDeleteFiles` - File deletion preview
+
+**Text Synchronization**
+- [ ] `textDocument/willSave` - File will save notification
+- [ ] `textDocument/willSaveWaitUntil` - File will save wait until
+
+**Window Features**
+- [ ] `window/showMessage` - Show message to user
+- [ ] `window/showMessageRequest` - Show message request to user
+- [ ] `window/workDoneProgress` - Work done progress
 
 ## Development
 
