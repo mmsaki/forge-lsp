@@ -1,6 +1,7 @@
 use crate::{
     goto, references, rename,
     runner::{ForgeRunner, Runner},
+    utils,
 };
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::RwLock;
@@ -541,6 +542,26 @@ impl LanguageServer for ForgeLsp {
             }
         };
 
+        // Get the current identifier at the position
+        let current_identifier = match rename::get_identifier_at_position(&source_bytes, position) {
+            Some(id) => id,
+            None => {
+                self.client.log_message(MessageType::INFO, "No identifier found at position").await;
+                return Ok(None);
+            }
+        };
+
+        // Validate the new name
+        if !utils::is_valid_solidity_identifier(&new_name) {
+            return Err(tower_lsp::jsonrpc::Error::invalid_params("New name is not a valid Solidity identifier"));
+        }
+
+        // If the new name is the same as the current identifier, no change needed
+        if new_name == current_identifier {
+            self.client.log_message(MessageType::INFO, "New name is the same as current identifier").await;
+            return Ok(None);
+        }
+
         // Try to get AST data from cache first
         let ast_data = {
             let cache = self.ast_cache.read().await;
@@ -612,7 +633,7 @@ impl LanguageServer for ForgeLsp {
                 // Apply edits for other files server-side
                 if !server_changes.is_empty() {
                     let server_edit = WorkspaceEdit {
-                        changes: Some(server_changes),
+                        changes: Some(server_changes.clone()),
                         ..Default::default()
                     };
                     if let Err(e) = self.apply_workspace_edit(&server_edit).await {
@@ -624,6 +645,12 @@ impl LanguageServer for ForgeLsp {
                     self.client
                         .log_message(MessageType::INFO, "Applied server-side rename edits and saved other files")
                         .await;
+
+                    // Invalidate AST cache for modified files
+                    let mut cache = self.ast_cache.write().await;
+                    for uri in server_changes.keys() {
+                        cache.remove(uri.as_str());
+                    }
                 }
 
                 // Return edits for the current file to be applied client-side

@@ -4,8 +4,21 @@ use tower_lsp::lsp_types::{Position, Range, TextEdit, Url, WorkspaceEdit};
 
 use crate::references;
 
+/// Check if two ranges overlap
+fn ranges_overlap(a: &Range, b: &Range) -> bool {
+    // Same line
+    if a.start.line == b.start.line && a.end.line == b.end.line {
+        // Check if they overlap on the line
+        !(a.end.character <= b.start.character || b.end.character <= a.start.character)
+    } else {
+        // Different lines - for simplicity, consider them non-overlapping
+        // since rename edits should be on the same line
+        false
+    }
+}
+
 /// Extract the identifier (word) at the given position in the source bytes
-fn get_identifier_at_position(source_bytes: &[u8], position: Position) -> Option<String> {
+pub fn get_identifier_at_position(source_bytes: &[u8], position: Position) -> Option<String> {
     let text = String::from_utf8_lossy(source_bytes);
     let lines: Vec<&str> = text.lines().collect();
 
@@ -23,12 +36,17 @@ fn get_identifier_at_position(source_bytes: &[u8], position: Position) -> Option
     let mut end = position.character as usize;
 
     // Move start backwards to find word start
-    while start > 0 && (line.as_bytes()[start - 1].is_ascii_alphanumeric() || line.as_bytes()[start - 1] == b'_') {
+    while start > 0
+        && (line.as_bytes()[start - 1].is_ascii_alphanumeric()
+            || line.as_bytes()[start - 1] == b'_')
+    {
         start -= 1;
     }
 
     // Move end forwards to find word end
-    while end < line.len() && (line.as_bytes()[end].is_ascii_alphanumeric() || line.as_bytes()[end] == b'_') {
+    while end < line.len()
+        && (line.as_bytes()[end].is_ascii_alphanumeric() || line.as_bytes()[end] == b'_')
+    {
         end += 1;
     }
 
@@ -44,10 +62,12 @@ fn get_identifier_at_position(source_bytes: &[u8], position: Position) -> Option
     Some(line[start..end].to_string())
 }
 
-
-
-/// Adjust the range to cover only the specific identifier within the range text
-fn adjust_range_for_identifier(range: &Range, source_bytes: &[u8], identifier: &str) -> Option<Range> {
+/// Adjust the range to cover the specific identifier within the range text and return the extra text after it
+fn adjust_range_for_identifier(
+    range: &Range,
+    source_bytes: &[u8],
+    identifier: &str,
+) -> Option<(Range, String)> {
     let text = String::from_utf8_lossy(source_bytes);
     let start_line = range.start.line as usize;
     let end_line = range.end.line as usize;
@@ -71,27 +91,39 @@ fn adjust_range_for_identifier(range: &Range, source_bytes: &[u8], identifier: &
 
     let range_text = &line[start_char..end_char];
 
-    // Find the identifier in the range text
-    if let Some(pos) = range_text.find(identifier) {
-        let new_start_char = start_char + pos;
-        let new_end_char = new_start_char + identifier.len();
+    // Count occurrences of the identifier in the range text
+    let occurrences: Vec<_> = range_text.match_indices(identifier).collect();
 
-        // Make sure it doesn't go beyond the original range
-        if new_end_char <= end_char {
-            return Some(Range {
+    match occurrences.len() {
+        0 => {
+            // Identifier not found in range - this shouldn't happen for valid AST
+            // Fall back to original range as last resort
+            Some((range.clone(), "".to_string()))
+        }
+        1 => {
+            // Exactly one occurrence - adjust the range
+            let (pos, _) = occurrences[0];
+            let new_start_char = start_char + pos;
+            let extra = &range_text[pos + identifier.len()..];
+
+            let adjusted_range = Range {
                 start: Position {
                     line: start_line as u32,
                     character: new_start_char as u32,
                 },
                 end: Position {
                     line: end_line as u32,
-                    character: new_end_char as u32,
+                    character: end_char as u32,
                 },
-            });
+            };
+            Some((adjusted_range, extra.to_string()))
+        }
+        _ => {
+            // Multiple occurrences - this indicates the range covers too much
+            // Fall back to original range, but log that this might cause issues
+            Some((range.clone(), "".to_string()))
         }
     }
-
-    None
 }
 
 /// Handle a rename request by finding all references to the symbol at the given position
@@ -124,15 +156,34 @@ pub fn rename_symbol(
             Err(_) => continue, // Skip if can't read
         };
 
-        // Adjust the range to cover only the identifier
-        let adjusted_range = adjust_range_for_identifier(&location.range, &location_source_bytes, &identifier)
-            .unwrap_or(location.range);
+        // Adjust the range to cover the identifier and get the extra text
+        let (adjusted_range, extra) = adjust_range_for_identifier(&location.range, &location_source_bytes, &identifier)
+            .unwrap_or((location.range, "".to_string()));
 
+        let new_text = new_name.clone() + &extra;
         let text_edit = TextEdit {
             range: adjusted_range,
-            new_text: new_name.clone(),
+            new_text,
         };
         changes.entry(location.uri).or_default().push(text_edit);
+    }
+
+    // Filter out overlapping edits for each file to prevent double counting
+    for edits in changes.values_mut() {
+        // Sort edits by start position
+        edits.sort_by_key(|edit| (edit.range.start.line, edit.range.start.character));
+
+        // Remove overlapping edits (keep the first one)
+        let mut filtered = Vec::new();
+        for edit in &*edits {
+            let overlaps = filtered.iter().any(|existing: &TextEdit| {
+                ranges_overlap(&existing.range, &edit.range)
+            });
+            if !overlaps {
+                filtered.push(edit.clone());
+            }
+        }
+        *edits = filtered;
     }
 
     Some(WorkspaceEdit {
@@ -342,9 +393,11 @@ mod tests {
 
             // Check the line to see if it's the struct or the reference
             let line = text_edit.range.start.line as usize;
-            if line == 4 { // struct Name
+            if line == 4 {
+                // struct Name
                 found_struct_decl = true;
-            } else if line == 11 { // IC.Name
+            } else if line == 11 {
+                // IC.Name
                 found_type_ref = true;
             }
         }
@@ -385,7 +438,11 @@ mod tests {
         assert!(!file_changes.is_empty());
 
         // Should have exactly 3 changes: declaration and 2 usages
-        assert_eq!(file_changes.len(), 3, "Should have 3 changes: declaration and 2 usages");
+        assert_eq!(
+            file_changes.len(),
+            3,
+            "Should have 3 changes: declaration and 2 usages"
+        );
 
         // All changes should have the new name
         for text_edit in file_changes {
@@ -396,7 +453,8 @@ mod tests {
         }
 
         // Check that we have changes on the expected lines
-        let mut lines_with_changes: Vec<u32> = file_changes.iter()
+        let mut lines_with_changes: Vec<u32> = file_changes
+            .iter()
             .map(|edit| edit.range.start.line)
             .collect();
         lines_with_changes.sort();

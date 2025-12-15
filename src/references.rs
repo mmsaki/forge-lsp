@@ -200,7 +200,17 @@ pub fn goto_references(
         }
     }
 
-    locations
+    // Remove duplicate locations
+    let mut unique_locations = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for location in locations {
+        let key = (location.uri.clone(), location.range.start.line, location.range.start.character, location.range.end.line, location.range.end.character);
+        if seen.insert(key) {
+            unique_locations.push(location);
+        }
+    }
+
+    unique_locations
 }
 
 #[cfg(test)]

@@ -52,6 +52,24 @@ pub fn position_to_byte_offset(source: &str, line: u32, character: u32) -> usize
     source.len()
 }
 
+/// Check if a string is a valid Solidity identifier
+pub fn is_valid_solidity_identifier(name: &str) -> bool {
+    if name.is_empty() {
+        return false;
+    }
+    let chars: Vec<char> = name.chars().collect();
+    let first = chars[0];
+    if !first.is_ascii_alphabetic() && first != '_' {
+        return false;
+    }
+    for &c in &chars {
+        if !c.is_ascii_alphanumeric() && c != '_' {
+            return false;
+        }
+    }
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -118,5 +136,21 @@ mod tests {
     fn test_position_to_byte_offset_empty() {
         let source = "";
         assert_eq!(position_to_byte_offset(source, 0, 0), 0);
+    }
+
+    #[test]
+    fn test_is_valid_solidity_identifier() {
+        assert!(is_valid_solidity_identifier("validName"));
+        assert!(is_valid_solidity_identifier("_valid"));
+        assert!(is_valid_solidity_identifier("a"));
+        assert!(is_valid_solidity_identifier("name123"));
+        assert!(is_valid_solidity_identifier("_"));
+        assert!(is_valid_solidity_identifier("a_b_c"));
+
+        assert!(!is_valid_solidity_identifier(""));
+        assert!(!is_valid_solidity_identifier("123invalid"));
+        assert!(!is_valid_solidity_identifier("invalid-name"));
+        assert!(!is_valid_solidity_identifier("invalid name"));
+        assert!(!is_valid_solidity_identifier("invalid.name"));
     }
 }
