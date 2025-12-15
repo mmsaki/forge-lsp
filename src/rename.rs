@@ -96,9 +96,8 @@ fn adjust_range_for_identifier(
 
     match occurrences.len() {
         0 => {
-            // Identifier not found in range - this shouldn't happen for valid AST
-            // Fall back to original range as last resort
-            Some((range.clone(), "".to_string()))
+            // Identifier not found in range - skip this location
+            None
         }
         1 => {
             // Exactly one occurrence - adjust the range
@@ -121,7 +120,7 @@ fn adjust_range_for_identifier(
         _ => {
             // Multiple occurrences - this indicates the range covers too much
             // Fall back to original range, but log that this might cause issues
-            Some((range.clone(), "".to_string()))
+            Some((*range, "".to_string()))
         }
     }
 }
@@ -157,15 +156,17 @@ pub fn rename_symbol(
         };
 
         // Adjust the range to cover the identifier and get the extra text
-        let (adjusted_range, extra) = adjust_range_for_identifier(&location.range, &location_source_bytes, &identifier)
-            .unwrap_or((location.range, "".to_string()));
-
-        let new_text = new_name.clone() + &extra;
-        let text_edit = TextEdit {
-            range: adjusted_range,
-            new_text,
-        };
-        changes.entry(location.uri).or_default().push(text_edit);
+        if let Some((adjusted_range, extra)) =
+            adjust_range_for_identifier(&location.range, &location_source_bytes, &identifier)
+        {
+            let new_text = new_name.clone() + &extra;
+            let text_edit = TextEdit {
+                range: adjusted_range,
+                new_text,
+            };
+            changes.entry(location.uri).or_default().push(text_edit);
+        }
+        // Skip locations where the identifier is not found in the range
     }
 
     // Filter out overlapping edits for each file to prevent double counting
@@ -176,9 +177,9 @@ pub fn rename_symbol(
         // Remove overlapping edits (keep the first one)
         let mut filtered = Vec::new();
         for edit in &*edits {
-            let overlaps = filtered.iter().any(|existing: &TextEdit| {
-                ranges_overlap(&existing.range, &edit.range)
-            });
+            let overlaps = filtered
+                .iter()
+                .any(|existing: &TextEdit| ranges_overlap(&existing.range, &edit.range));
             if !overlaps {
                 filtered.push(edit.clone());
             }

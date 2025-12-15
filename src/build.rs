@@ -3,7 +3,10 @@ use std::path::Path;
 use tower_lsp::lsp_types::{Diagnostic, DiagnosticSeverity, NumberOrString, Position, Range};
 
 fn ignored_code_for_tests(value: &serde_json::Value) -> bool {
-    let error_code = value.get("errorCode").and_then(|v| v.as_str()).unwrap_or_default();
+    let error_code = value
+        .get("errorCode")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default();
     let file_path = value
         .get("sourceLocation")
         .and_then(|loc| loc.get("file"))
@@ -11,8 +14,8 @@ fn ignored_code_for_tests(value: &serde_json::Value) -> bool {
         .unwrap_or_default();
 
     // Ignore error code 5574, 3860 for test files (code size limit)
-    (error_code == "5574" && (file_path.contains(".t.sol") || file_path.contains(".s.sol"))) || (error_code == "3860" && (file_path.contains(".t.sol") || file_path.contains(".s.sol")))
-
+    (error_code == "5574" && (file_path.contains(".t.sol") || file_path.contains(".s.sol")))
+        || (error_code == "3860" && (file_path.contains(".t.sol") || file_path.contains(".s.sol")))
 }
 
 pub fn build_output_to_diagnostics(
@@ -67,12 +70,21 @@ pub fn build_output_to_diagnostics(
             }
 
             let range = Range {
-                start: Position { line: start_line, character: start_col },
-                end: Position { line: end_line, character: end_col + 1 },
+                start: Position {
+                    line: start_line,
+                    character: start_col,
+                },
+                end: Position {
+                    line: end_line,
+                    character: end_col + 1,
+                },
             };
 
-            let message =
-                err.get("message").and_then(|m| m.as_str()).unwrap_or("Unknown error").to_string();
+            let message = err
+                .get("message")
+                .and_then(|m| m.as_str())
+                .unwrap_or("Unknown error")
+                .to_string();
 
             let severity = match err.get("severity").and_then(|s| s.as_str()) {
                 Some("error") => Some(DiagnosticSeverity::ERROR),
@@ -137,7 +149,8 @@ src = "src"
 out = "out"
 libs = ["lib"]
 "#;
-        fs::write(temp_dir.path().join("foundry.toml"), foundry_toml).expect("failed to write foundry.toml");
+        fs::write(temp_dir.path().join("foundry.toml"), foundry_toml)
+            .expect("failed to write foundry.toml");
 
         let contract_path = src_dir.join("Contract.sol");
         fs::write(&contract_path, contents).expect("failed to write contract");
@@ -161,7 +174,10 @@ libs = ["lib"]
         let file_path = temp_dir.path().to_string_lossy().to_string();
 
         let json = compiler.build(&file_path).await.unwrap();
-        assert!(json.get("errors").is_some(), "Expected 'errors' array in build output");
+        assert!(
+            json.get("errors").is_some(),
+            "Expected 'errors' array in build output"
+        );
     }
 
     #[tokio::test]
@@ -173,7 +189,10 @@ libs = ["lib"]
         if let Some(errors) = json.get("errors")
             && let Some(first) = errors.get(0)
         {
-            assert!(first.get("message").is_some(), "Expected error object to have a message");
+            assert!(
+                first.get("message").is_some(),
+                "Expected error object to have a message"
+            );
         }
     }
 
@@ -181,7 +200,9 @@ libs = ["lib"]
     async fn test_diagnostic_offsets_match_source() {
         let (temp_dir, contract_path, compiler) = setup(CONTRACT);
         let file_path = temp_dir.path().to_string_lossy().to_string();
-        let source_code = tokio::fs::read_to_string(&contract_path).await.expect("read source");
+        let source_code = tokio::fs::read_to_string(&contract_path)
+            .await
+            .expect("read source");
         let build_output = compiler.build(&file_path).await.expect("build failed");
         let expected_start_byte = 81;
         let expected_end_byte = 82;
@@ -205,9 +226,13 @@ libs = ["lib"]
     async fn test_build_output_to_diagnostics_from_file() {
         let (temp_dir, contract_path, compiler) = setup(CONTRACT);
         let file_path = temp_dir.path().to_string_lossy().to_string();
-        let source_code =
-            tokio::fs::read_to_string(&contract_path).await.expect("Failed to read source file");
-        let build_output = compiler.build(&file_path).await.expect("Compiler build failed");
+        let source_code = tokio::fs::read_to_string(&contract_path)
+            .await
+            .expect("Failed to read source file");
+        let build_output = compiler
+            .build(&file_path)
+            .await
+            .expect("Compiler build failed");
         let filename = std::path::Path::new(&contract_path)
             .file_name()
             .and_then(|f| f.to_str())

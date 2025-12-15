@@ -85,14 +85,23 @@ pub fn cache_ids(
                             .and_then(|v| v.as_str())
                             .map(|s| s.to_string());
 
-                        // Check for nameLocations array and use first element if
-                        // available
+                        // Check for nameLocations array and use appropriate element
+                        // For IdentifierPath (qualified names like D.State), use the last element (the actual identifier)
+                        // For other nodes, use the first element
                         if name_location.is_none()
                             && let Some(name_locations) = tree.get("nameLocations")
                             && let Some(locations_array) = name_locations.as_array()
                             && !locations_array.is_empty()
                         {
-                            name_location = locations_array[0].as_str().map(|s| s.to_string());
+                            let node_type = tree.get("nodeType").and_then(|v| v.as_str());
+                            if node_type == Some("IdentifierPath") {
+                                name_location = locations_array
+                                    .last()
+                                    .and_then(|v| v.as_str())
+                                    .map(|s| s.to_string());
+                            } else {
+                                name_location = locations_array[0].as_str().map(|s| s.to_string());
+                            }
                         }
 
                         let node_info = NodeInfo {
@@ -404,17 +413,12 @@ mod tests {
 
     fn get_ast_data() -> Option<serde_json::Value> {
         let output = Command::new("forge")
-            .arg("build")
-            .arg("testdata/C.sol")
-            .arg("--json")
-            .arg("--no-cache")
-            .arg("--ast")
-            .env("FOUNDRY_DISABLE_NIGHTLY_WARNING", "1")
-            .env("FOUNDRY_LINT_LINT_ON_BUILD", "false")
+            .args(["build", "--ast", "--silent", "--build-info"])
+            .current_dir("testdata")
             .output()
             .ok()?;
 
-        let stdout_str = String::from_utf8_lossy(&output.stdout);
+        let stdout_str = String::from_utf8(output.stdout).ok()?;
         serde_json::from_str(&stdout_str).ok()
     }
 

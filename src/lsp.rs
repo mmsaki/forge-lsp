@@ -43,7 +43,11 @@ impl ForgeLsp {
     pub fn new(client: Client) -> Self {
         let compiler = Arc::new(ForgeRunner) as Arc<dyn Runner>;
         let ast_cache = Arc::new(RwLock::new(HashMap::new()));
-        Self { client, compiler, ast_cache }
+        Self {
+            client,
+            compiler,
+            ast_cache,
+        }
     }
 
     async fn on_change<'a>(&self, params: TextDocumentItem<'a>) {
@@ -81,10 +85,15 @@ impl ForgeLsp {
         if let Ok(ast_data) = ast_result {
             let mut cache = self.ast_cache.write().await;
             cache.insert(uri.to_string(), ast_data);
-            self.client.log_message(MessageType::INFO, "AST data cached successfully").await;
+            self.client
+                .log_message(MessageType::INFO, "AST data cached successfully")
+                .await;
         } else if let Err(e) = ast_result {
             self.client
-                .log_message(MessageType::WARNING, format!("Failed to cache AST data: {e}"))
+                .log_message(
+                    MessageType::WARNING,
+                    format!("Failed to cache AST data: {e}"),
+                )
                 .await;
         }
 
@@ -130,7 +139,9 @@ impl ForgeLsp {
             }
         }
 
-        self.client.publish_diagnostics(uri, all_diagnostics, version).await;
+        self.client
+            .publish_diagnostics(uri, all_diagnostics, version)
+            .await;
     }
 
     async fn apply_workspace_edit(&self, workspace_edit: &WorkspaceEdit) -> Result<(), String> {
@@ -181,16 +192,22 @@ impl LanguageServer for ForgeLsp {
     }
 
     async fn initialized(&self, _: InitializedParams) {
-        self.client.log_message(MessageType::INFO, "lsp server initialized!").await;
+        self.client
+            .log_message(MessageType::INFO, "lsp server initialized!")
+            .await;
     }
 
     async fn shutdown(&self) -> tower_lsp::jsonrpc::Result<()> {
-        self.client.log_message(MessageType::INFO, "lsp server shutting down").await;
+        self.client
+            .log_message(MessageType::INFO, "lsp server shutting down")
+            .await;
         Ok(())
     }
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
-        self.client.log_message(MessageType::INFO, "file opened").await;
+        self.client
+            .log_message(MessageType::INFO, "file opened")
+            .await;
 
         self.on_change(TextDocumentItem {
             uri: params.text_document.uri,
@@ -201,20 +218,27 @@ impl LanguageServer for ForgeLsp {
     }
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
-        self.client.log_message(MessageType::INFO, "file changed").await;
+        self.client
+            .log_message(MessageType::INFO, "file changed")
+            .await;
 
         // Invalidate cached AST data for the changed file
         let uri = params.text_document.uri;
         let mut cache = self.ast_cache.write().await;
         if cache.remove(&uri.to_string()).is_some() {
             self.client
-                .log_message(MessageType::INFO, "Invalidated cached AST data for changed file")
+                .log_message(
+                    MessageType::INFO,
+                    "Invalidated cached AST data for changed file",
+                )
                 .await;
         }
     }
 
     async fn did_save(&self, params: DidSaveTextDocumentParams) {
-        self.client.log_message(MessageType::INFO, "file saved - running diagnostics").await;
+        self.client
+            .log_message(MessageType::INFO, "file saved - running diagnostics")
+            .await;
 
         // Run diagnostics on save, regardless of whether text is provided
         // If text is provided, use it; otherwise read from file system
@@ -236,8 +260,11 @@ impl LanguageServer for ForgeLsp {
             }
         };
 
-        let item =
-            TextDocumentItem { uri: params.text_document.uri, text: &text_content, version: None };
+        let item = TextDocumentItem {
+            uri: params.text_document.uri,
+            text: &text_content,
+            version: None,
+        };
 
         // Always run diagnostics on save to reflect the current file state
         self.on_change(item).await;
@@ -245,26 +272,36 @@ impl LanguageServer for ForgeLsp {
     }
 
     async fn did_close(&self, _: DidCloseTextDocumentParams) {
-        self.client.log_message(MessageType::INFO, "file closed").await;
+        self.client
+            .log_message(MessageType::INFO, "file closed")
+            .await;
     }
 
     async fn did_change_configuration(&self, _: DidChangeConfigurationParams) {
-        self.client.log_message(MessageType::INFO, "configuration changed!").await;
+        self.client
+            .log_message(MessageType::INFO, "configuration changed!")
+            .await;
     }
 
     async fn did_change_workspace_folders(&self, _: DidChangeWorkspaceFoldersParams) {
-        self.client.log_message(MessageType::INFO, "workspace folders changed!").await;
+        self.client
+            .log_message(MessageType::INFO, "workspace folders changed!")
+            .await;
     }
 
     async fn did_change_watched_files(&self, _: DidChangeWatchedFilesParams) {
-        self.client.log_message(MessageType::INFO, "watched files have changed!").await;
+        self.client
+            .log_message(MessageType::INFO, "watched files have changed!")
+            .await;
     }
 
     async fn goto_definition(
         &self,
         params: GotoDefinitionParams,
     ) -> tower_lsp::jsonrpc::Result<Option<GotoDefinitionResponse>> {
-        self.client.log_message(MessageType::INFO, "Got a textDocument/definition request").await;
+        self.client
+            .log_message(MessageType::INFO, "Got a textDocument/definition request")
+            .await;
 
         let uri = params.text_document_position_params.text_document.uri;
         let position = params.text_document_position_params.position;
@@ -273,7 +310,9 @@ impl LanguageServer for ForgeLsp {
         let file_path = match uri.to_file_path() {
             Ok(path) => path,
             Err(_) => {
-                self.client.log_message(MessageType::ERROR, "Invalid file URI").await;
+                self.client
+                    .log_message(MessageType::ERROR, "Invalid file URI")
+                    .await;
                 return Ok(None);
             }
         };
@@ -293,7 +332,9 @@ impl LanguageServer for ForgeLsp {
         let ast_data = {
             let cache = self.ast_cache.read().await;
             if let Some(cached_ast) = cache.get(&uri.to_string()) {
-                self.client.log_message(MessageType::INFO, "Using cached AST data").await;
+                self.client
+                    .log_message(MessageType::INFO, "Using cached AST data")
+                    .await;
                 cached_ast.clone()
             } else {
                 // Cache miss - get AST data and cache it
@@ -302,7 +343,9 @@ impl LanguageServer for ForgeLsp {
                 let path_str = match file_path.to_str() {
                     Some(s) => s,
                     None => {
-                        self.client.log_message(MessageType::ERROR, "Invalid file path").await;
+                        self.client
+                            .log_message(MessageType::ERROR, "Invalid file path")
+                            .await;
                         return Ok(None);
                     }
                 };
@@ -333,14 +376,25 @@ impl LanguageServer for ForgeLsp {
             self.client
                 .log_message(
                     MessageType::INFO,
-                    format!("Found definition at {}:{}", location.uri, location.range.start.line),
+                    format!(
+                        "Found definition at {}:{}",
+                        location.uri, location.range.start.line
+                    ),
                 )
                 .await;
             Ok(Some(GotoDefinitionResponse::from(location)))
         } else {
-            self.client.log_message(MessageType::INFO, "No definition found").await;
+            self.client
+                .log_message(MessageType::INFO, "No definition found")
+                .await;
             // Fallback to current position
-            let location = Location { uri, range: Range { start: position, end: position } };
+            let location = Location {
+                uri,
+                range: Range {
+                    start: position,
+                    end: position,
+                },
+            };
             Ok(Some(GotoDefinitionResponse::from(location)))
         }
     }
@@ -349,7 +403,9 @@ impl LanguageServer for ForgeLsp {
         &self,
         params: request::GotoDeclarationParams,
     ) -> tower_lsp::jsonrpc::Result<Option<request::GotoDeclarationResponse>> {
-        self.client.log_message(MessageType::INFO, "Got a textDocument/declaration request").await;
+        self.client
+            .log_message(MessageType::INFO, "Got a textDocument/declaration request")
+            .await;
 
         let uri = params.text_document_position_params.text_document.uri;
         let position = params.text_document_position_params.position;
@@ -358,7 +414,9 @@ impl LanguageServer for ForgeLsp {
         let file_path = match uri.to_file_path() {
             Ok(path) => path,
             Err(_) => {
-                self.client.log_message(MessageType::ERROR, "Invalid file URI").await;
+                self.client
+                    .log_message(MessageType::ERROR, "Invalid file URI")
+                    .await;
                 return Ok(None);
             }
         };
@@ -378,7 +436,9 @@ impl LanguageServer for ForgeLsp {
         let ast_data = {
             let cache = self.ast_cache.read().await;
             if let Some(cached_ast) = cache.get(&uri.to_string()) {
-                self.client.log_message(MessageType::INFO, "Using cached AST data").await;
+                self.client
+                    .log_message(MessageType::INFO, "Using cached AST data")
+                    .await;
                 cached_ast.clone()
             } else {
                 // Cache miss - get AST data and cache it
@@ -387,7 +447,9 @@ impl LanguageServer for ForgeLsp {
                 let path_str = match file_path.to_str() {
                     Some(s) => s,
                     None => {
-                        self.client.log_message(MessageType::ERROR, "Invalid file path").await;
+                        self.client
+                            .log_message(MessageType::ERROR, "Invalid file path")
+                            .await;
                         return Ok(None);
                     }
                 };
@@ -418,14 +480,25 @@ impl LanguageServer for ForgeLsp {
             self.client
                 .log_message(
                     MessageType::INFO,
-                    format!("Found declaration at {}:{}", location.uri, location.range.start.line),
+                    format!(
+                        "Found declaration at {}:{}",
+                        location.uri, location.range.start.line
+                    ),
                 )
                 .await;
             Ok(Some(request::GotoDeclarationResponse::from(location)))
         } else {
-            self.client.log_message(MessageType::INFO, "No declaration found").await;
+            self.client
+                .log_message(MessageType::INFO, "No declaration found")
+                .await;
             // Fallback to current position
-            let location = Location { uri, range: Range { start: position, end: position } };
+            let location = Location {
+                uri,
+                range: Range {
+                    start: position,
+                    end: position,
+                },
+            };
             Ok(Some(request::GotoDeclarationResponse::from(location)))
         }
     }
@@ -434,7 +507,9 @@ impl LanguageServer for ForgeLsp {
         &self,
         params: ReferenceParams,
     ) -> tower_lsp::jsonrpc::Result<Option<Vec<Location>>> {
-        self.client.log_message(MessageType::INFO, "Got a textDocument/references request").await;
+        self.client
+            .log_message(MessageType::INFO, "Got a textDocument/references request")
+            .await;
 
         let uri = params.text_document_position.text_document.uri;
         let position = params.text_document_position.position;
@@ -443,7 +518,9 @@ impl LanguageServer for ForgeLsp {
         let file_path = match uri.to_file_path() {
             Ok(path) => path,
             Err(_) => {
-                self.client.log_message(MessageType::ERROR, "Invalid file URI").await;
+                self.client
+                    .log_message(MessageType::ERROR, "Invalid file URI")
+                    .await;
                 return Ok(None);
             }
         };
@@ -463,7 +540,9 @@ impl LanguageServer for ForgeLsp {
         let ast_data = {
             let cache = self.ast_cache.read().await;
             if let Some(cached_ast) = cache.get(&uri.to_string()) {
-                self.client.log_message(MessageType::INFO, "Using cached AST data").await;
+                self.client
+                    .log_message(MessageType::INFO, "Using cached AST data")
+                    .await;
                 cached_ast.clone()
             } else {
                 // Cache miss - get AST data and cache it
@@ -472,7 +551,9 @@ impl LanguageServer for ForgeLsp {
                 let path_str = match file_path.to_str() {
                     Some(s) => s,
                     None => {
-                        self.client.log_message(MessageType::ERROR, "Invalid file path").await;
+                        self.client
+                            .log_message(MessageType::ERROR, "Invalid file path")
+                            .await;
                         return Ok(None);
                     }
                 };
@@ -502,11 +583,16 @@ impl LanguageServer for ForgeLsp {
         let locations = references::goto_references(&ast_data, &uri, position, &source_bytes);
 
         if locations.is_empty() {
-            self.client.log_message(MessageType::INFO, "No references found").await;
+            self.client
+                .log_message(MessageType::INFO, "No references found")
+                .await;
             Ok(None)
         } else {
             self.client
-                .log_message(MessageType::INFO, format!("Found {} references", locations.len()))
+                .log_message(
+                    MessageType::INFO,
+                    format!("Found {} references", locations.len()),
+                )
                 .await;
             Ok(Some(locations))
         }
@@ -516,7 +602,9 @@ impl LanguageServer for ForgeLsp {
         &self,
         params: RenameParams,
     ) -> tower_lsp::jsonrpc::Result<Option<WorkspaceEdit>> {
-        self.client.log_message(MessageType::INFO, "Got a textDocument/rename request").await;
+        self.client
+            .log_message(MessageType::INFO, "Got a textDocument/rename request")
+            .await;
 
         let uri = params.text_document_position.text_document.uri;
         let position = params.text_document_position.position;
@@ -526,7 +614,9 @@ impl LanguageServer for ForgeLsp {
         let file_path = match uri.to_file_path() {
             Ok(path) => path,
             Err(_) => {
-                self.client.log_message(MessageType::ERROR, "Invalid file URI").await;
+                self.client
+                    .log_message(MessageType::ERROR, "Invalid file URI")
+                    .await;
                 return Ok(None);
             }
         };
@@ -546,19 +636,28 @@ impl LanguageServer for ForgeLsp {
         let current_identifier = match rename::get_identifier_at_position(&source_bytes, position) {
             Some(id) => id,
             None => {
-                self.client.log_message(MessageType::INFO, "No identifier found at position").await;
+                self.client
+                    .log_message(MessageType::INFO, "No identifier found at position")
+                    .await;
                 return Ok(None);
             }
         };
 
         // Validate the new name
         if !utils::is_valid_solidity_identifier(&new_name) {
-            return Err(tower_lsp::jsonrpc::Error::invalid_params("New name is not a valid Solidity identifier"));
+            return Err(tower_lsp::jsonrpc::Error::invalid_params(
+                "New name is not a valid Solidity identifier",
+            ));
         }
 
         // If the new name is the same as the current identifier, no change needed
         if new_name == current_identifier {
-            self.client.log_message(MessageType::INFO, "New name is the same as current identifier").await;
+            self.client
+                .log_message(
+                    MessageType::INFO,
+                    "New name is the same as current identifier",
+                )
+                .await;
             return Ok(None);
         }
 
@@ -566,7 +665,9 @@ impl LanguageServer for ForgeLsp {
         let ast_data = {
             let cache = self.ast_cache.read().await;
             if let Some(cached_ast) = cache.get(&uri.to_string()) {
-                self.client.log_message(MessageType::INFO, "Using cached AST data").await;
+                self.client
+                    .log_message(MessageType::INFO, "Using cached AST data")
+                    .await;
                 cached_ast.clone()
             } else {
                 // Cache miss - get AST data and cache it
@@ -575,7 +676,9 @@ impl LanguageServer for ForgeLsp {
                 let path_str = match file_path.to_str() {
                     Some(s) => s,
                     None => {
-                        self.client.log_message(MessageType::ERROR, "Invalid file path").await;
+                        self.client
+                            .log_message(MessageType::ERROR, "Invalid file path")
+                            .await;
                         return Ok(None);
                     }
                 };
@@ -609,7 +712,9 @@ impl LanguageServer for ForgeLsp {
                         MessageType::INFO,
                         format!(
                             "Created rename edit with {} changes",
-                            workspace_edit.changes.as_ref()
+                            workspace_edit
+                                .changes
+                                .as_ref()
                                 .map(|c| c.values().map(|v| v.len()).sum::<usize>())
                                 .unwrap_or(0)
                         ),
@@ -638,12 +743,18 @@ impl LanguageServer for ForgeLsp {
                     };
                     if let Err(e) = self.apply_workspace_edit(&server_edit).await {
                         self.client
-                            .log_message(MessageType::ERROR, format!("Failed to apply server-side rename edits: {}", e))
+                            .log_message(
+                                MessageType::ERROR,
+                                format!("Failed to apply server-side rename edits: {}", e),
+                            )
                             .await;
                         return Ok(None);
                     }
                     self.client
-                        .log_message(MessageType::INFO, "Applied server-side rename edits and saved other files")
+                        .log_message(
+                            MessageType::INFO,
+                            "Applied server-side rename edits and saved other files",
+                        )
                         .await;
 
                     // Invalidate AST cache for modified files
@@ -665,7 +776,9 @@ impl LanguageServer for ForgeLsp {
                 }
             }
             None => {
-                self.client.log_message(MessageType::INFO, "No locations found for renaming").await;
+                self.client
+                    .log_message(MessageType::INFO, "No locations found for renaming")
+                    .await;
                 Ok(None)
             }
         }
@@ -675,7 +788,9 @@ impl LanguageServer for ForgeLsp {
         &self,
         _: ExecuteCommandParams,
     ) -> tower_lsp::jsonrpc::Result<Option<serde_json::Value>> {
-        self.client.log_message(MessageType::INFO, "command executed!").await;
+        self.client
+            .log_message(MessageType::INFO, "command executed!")
+            .await;
 
         match self.client.apply_edit(WorkspaceEdit::default()).await {
             Ok(res) if res.applied => self.client.log_message(MessageType::INFO, "applied").await,

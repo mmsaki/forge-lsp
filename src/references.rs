@@ -102,7 +102,13 @@ pub fn id_to_location(
 
     let uri = Url::from_file_path(&absolute_path).ok()?;
 
-    Some(Location { uri, range: Range { start: start_pos, end: end_pos } })
+    Some(Location {
+        uri,
+        range: Range {
+            start: start_pos,
+            end: end_pos,
+        },
+    })
 }
 
 /// Find all references to a symbol at the given position
@@ -127,13 +133,18 @@ pub fn goto_references(
         None => return vec![],
     };
 
-    let id_to_path = match first_build_info.get("source_id_to_path").and_then(|v| v.as_object()) {
+    let id_to_path = match first_build_info
+        .get("source_id_to_path")
+        .and_then(|v| v.as_object())
+    {
         Some(map) => map,
         None => return vec![],
     };
 
-    let id_to_path_map: HashMap<String, String> =
-        id_to_path.iter().map(|(k, v)| (k.clone(), v.as_str().unwrap_or("").to_string())).collect();
+    let id_to_path_map: HashMap<String, String> = id_to_path
+        .iter()
+        .map(|(k, v)| (k.clone(), v.as_str().unwrap_or("").to_string()))
+        .collect();
 
     let (nodes, path_to_abs) = cache_ids(sources);
     let all_refs = all_references(&nodes);
@@ -204,7 +215,13 @@ pub fn goto_references(
     let mut unique_locations = Vec::new();
     let mut seen = std::collections::HashSet::new();
     for location in locations {
-        let key = (location.uri.clone(), location.range.start.line, location.range.start.character, location.range.end.line, location.range.end.character);
+        let key = (
+            location.uri.clone(),
+            location.range.start.line,
+            location.range.start.character,
+            location.range.end.line,
+            location.range.end.character,
+        );
         if seen.insert(key) {
             unique_locations.push(location);
         }
@@ -256,8 +273,14 @@ mod tests {
 
         // If references are found, verify they have valid locations
         for location in &references {
-            assert!(location.range.start.line < 100, "Reference line should be reasonable");
-            assert!(!location.uri.as_str().is_empty(), "Reference URI should not be empty");
+            assert!(
+                location.range.start.line < 100,
+                "Reference line should be reasonable"
+            );
+            assert!(
+                !location.uri.as_str().is_empty(),
+                "Reference URI should not be empty"
+            );
         }
     }
 
@@ -279,7 +302,8 @@ mod tests {
 
         // Test goto references from the declaration of myValue (line 5: uint256 public myValue)
         let position_declaration = Position::new(4, 13); // Position of "myValue" in declaration
-        let references_from_declaration = goto_references(&ast_data, &file_uri, position_declaration, &source_bytes);
+        let references_from_declaration =
+            goto_references(&ast_data, &file_uri, position_declaration, &source_bytes);
 
         // Both should return the same number of references (declaration + all usages)
         assert_eq!(
@@ -296,16 +320,29 @@ mod tests {
         );
 
         // The locations should be the same regardless of where we started
-        let usage_locations: std::collections::HashSet<_> = references_from_usage.iter()
-            .map(|loc| (loc.uri.as_str(), loc.range.start.line, loc.range.start.character))
+        let usage_locations: std::collections::HashSet<_> = references_from_usage
+            .iter()
+            .map(|loc| {
+                (
+                    loc.uri.as_str(),
+                    loc.range.start.line,
+                    loc.range.start.character,
+                )
+            })
             .collect();
-        let declaration_locations: std::collections::HashSet<_> = references_from_declaration.iter()
-            .map(|loc| (loc.uri.as_str(), loc.range.start.line, loc.range.start.character))
+        let declaration_locations: std::collections::HashSet<_> = references_from_declaration
+            .iter()
+            .map(|loc| {
+                (
+                    loc.uri.as_str(),
+                    loc.range.start.line,
+                    loc.range.start.character,
+                )
+            })
             .collect();
 
         assert_eq!(
-            usage_locations,
-            declaration_locations,
+            usage_locations, declaration_locations,
             "References from usage and declaration should return the same locations"
         );
     }

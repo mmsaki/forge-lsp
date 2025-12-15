@@ -136,7 +136,8 @@ src = "src"
 out = "out"
 libs = ["lib"]
 "#;
-        fs::write(temp_dir.path().join("foundry.toml"), foundry_toml).expect("failed to write foundry.toml");
+        fs::write(temp_dir.path().join("foundry.toml"), foundry_toml)
+            .expect("failed to write foundry.toml");
 
         let contract_path = src_dir.join("Contract.sol");
         fs::write(&contract_path, contents).expect("failed to write contract");
@@ -184,7 +185,10 @@ libs = ["lib"]
 
         let first_diag = &diagnostics[0];
         assert_eq!(first_diag.source, Some("forge-lint".to_string()));
-        assert_eq!(first_diag.message, "[forge lint] function names should use mixedCase");
+        assert_eq!(
+            first_diag.message,
+            "[forge lint] function names should use mixedCase"
+        );
         assert_eq!(
             first_diag.severity,
             Some(tower_lsp::lsp_types::DiagnosticSeverity::INFORMATION)
