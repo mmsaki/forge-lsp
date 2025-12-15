@@ -192,16 +192,13 @@ pub fn goto_references(
     };
 
     // Get all references for the target node (declaration)
-    let refs = match all_refs.get(&target_node_id) {
-        Some(r) => r,
-        None => return vec![],
-    };
-
-    // Collect all related references
     let mut results = HashSet::new();
-    results.extend(refs.iter().copied());
-    // Also include the target node itself (the declaration)
-    results.insert(target_node_id);
+    results.insert(target_node_id); // Always include the target node itself (the declaration)
+
+    // Add any references to this node
+    if let Some(refs) = all_refs.get(&target_node_id) {
+        results.extend(refs.iter().copied());
+    }
 
     // Convert node IDs to locations
     let mut locations = Vec::new();

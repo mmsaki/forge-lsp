@@ -1,21 +1,8 @@
 use serde_json::Value;
 use std::collections::HashMap;
-use tower_lsp::lsp_types::{Position, Range, TextEdit, Url, WorkspaceEdit};
+use tower_lsp::lsp_types::{Position, TextEdit, Url, WorkspaceEdit};
 
 use crate::references;
-
-/// Check if two ranges overlap
-fn ranges_overlap(a: &Range, b: &Range) -> bool {
-    // Same line
-    if a.start.line == b.start.line && a.end.line == b.end.line {
-        // Check if they overlap on the line
-        !(a.end.character <= b.start.character || b.end.character <= a.start.character)
-    } else {
-        // Different lines - for simplicity, consider them non-overlapping
-        // since rename edits should be on the same line
-        false
-    }
-}
 
 /// Extract the identifier (word) at the given position in the source bytes
 pub fn get_identifier_at_position(source_bytes: &[u8], position: Position) -> Option<String> {
@@ -62,84 +49,18 @@ pub fn get_identifier_at_position(source_bytes: &[u8], position: Position) -> Op
     Some(line[start..end].to_string())
 }
 
-/// Adjust the range to cover the specific identifier within the range text and return the extra text after it
-fn adjust_range_for_identifier(
-    range: &Range,
-    source_bytes: &[u8],
-    identifier: &str,
-) -> Option<(Range, String)> {
-    let text = String::from_utf8_lossy(source_bytes);
-    let start_line = range.start.line as usize;
-    let end_line = range.end.line as usize;
-    let start_char = range.start.character as usize;
-    let end_char = range.end.character as usize;
-
-    if start_line != end_line {
-        // Multi-line ranges not supported for now
-        return None;
-    }
-
-    let lines: Vec<&str> = text.lines().collect();
-    if start_line >= lines.len() {
-        return None;
-    }
-
-    let line = lines[start_line];
-    if start_char > end_char || end_char > line.len() {
-        return None;
-    }
-
-    let range_text = &line[start_char..end_char];
-
-    // Count occurrences of the identifier in the range text
-    let occurrences: Vec<_> = range_text.match_indices(identifier).collect();
-
-    match occurrences.len() {
-        0 => {
-            // Identifier not found in range - skip this location
-            None
-        }
-        1 => {
-            // Exactly one occurrence - adjust the range
-            let (pos, _) = occurrences[0];
-            let new_start_char = start_char + pos;
-            let extra = &range_text[pos + identifier.len()..];
-
-            let adjusted_range = Range {
-                start: Position {
-                    line: start_line as u32,
-                    character: new_start_char as u32,
-                },
-                end: Position {
-                    line: end_line as u32,
-                    character: end_char as u32,
-                },
-            };
-            Some((adjusted_range, extra.to_string()))
-        }
-        _ => {
-            // Multiple occurrences - this indicates the range covers too much
-            // Fall back to original range, but log that this might cause issues
-            Some((*range, "".to_string()))
-        }
-    }
-}
-
 /// Handle a rename request by finding all references to the symbol at the given position
 /// and creating a WorkspaceEdit with the new name
 pub fn rename_symbol(
     ast_data: &Value,
     file_uri: &Url,
     position: Position,
-    source_bytes: &[u8],
+    _source_bytes: &[u8],
     new_name: String,
 ) -> Option<WorkspaceEdit> {
-    // Extract the identifier at the cursor position
-    let identifier = get_identifier_at_position(source_bytes, position)?;
-
     // Get all locations for renaming (declaration + references)
-    // This should already include the cursor position since we fixed goto_references
-    let locations = references::goto_references(ast_data, file_uri, position, source_bytes);
+    // The AST provides exact ranges, so we use them directly
+    let locations = references::goto_references(ast_data, file_uri, position, _source_bytes);
 
     if locations.is_empty() {
         return None;
@@ -149,43 +70,15 @@ pub fn rename_symbol(
     let mut changes: HashMap<Url, Vec<TextEdit>> = HashMap::new();
 
     for location in locations {
-        // Read the source file for this location to adjust the range
-        let location_source_bytes = match std::fs::read(location.uri.to_file_path().ok()?) {
-            Ok(bytes) => bytes,
-            Err(_) => continue, // Skip if can't read
+        // The AST already provides the exact range for the symbol, so use it directly
+        let text_edit = TextEdit {
+            range: location.range,
+            new_text: new_name.clone(),
         };
-
-        // Adjust the range to cover the identifier and get the extra text
-        if let Some((adjusted_range, extra)) =
-            adjust_range_for_identifier(&location.range, &location_source_bytes, &identifier)
-        {
-            let new_text = new_name.clone() + &extra;
-            let text_edit = TextEdit {
-                range: adjusted_range,
-                new_text,
-            };
-            changes.entry(location.uri).or_default().push(text_edit);
-        }
-        // Skip locations where the identifier is not found in the range
+        changes.entry(location.uri).or_default().push(text_edit);
     }
 
-    // Filter out overlapping edits for each file to prevent double counting
-    for edits in changes.values_mut() {
-        // Sort edits by start position
-        edits.sort_by_key(|edit| (edit.range.start.line, edit.range.start.character));
 
-        // Remove overlapping edits (keep the first one)
-        let mut filtered = Vec::new();
-        for edit in &*edits {
-            let overlaps = filtered
-                .iter()
-                .any(|existing: &TextEdit| ranges_overlap(&existing.range, &edit.range));
-            if !overlaps {
-                filtered.push(edit.clone());
-            }
-        }
-        *edits = filtered;
-    }
 
     Some(WorkspaceEdit {
         changes: Some(changes),
@@ -269,8 +162,51 @@ mod tests {
         let new_name = "new_name".to_string();
         let result = rename_symbol(&ast_data, &file_uri, position, &source_bytes, new_name);
 
-        // Should return None for positions with no references
+        // Should return None for positions with no valid identifiers
         assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_rename_symbol_single_occurrence() {
+        let ast_data = match get_ast_data() {
+            Some(data) => data,
+            None => {
+                return;
+            }
+        };
+
+        let file_uri = get_test_file_uri("testdata/Simple.sol");
+        let source_bytes = std::fs::read("testdata/Simple.sol").unwrap();
+
+        // Test rename on "value" variable which appears only once in Simple.sol
+        // Line 5: uint256 public value;
+        let position = Position::new(4, 13); // Position of "v" in "value"
+        let new_name = "newValue".to_string();
+        let result = rename_symbol(&ast_data, &file_uri, position, &source_bytes, new_name);
+
+        // Should return a workspace edit even for single occurrences
+        assert!(result.is_some());
+        let workspace_edit = result.unwrap();
+
+        // Should have changes
+        assert!(workspace_edit.changes.is_some());
+        let changes = workspace_edit.changes.unwrap();
+
+        // Should have changes in the file
+        assert!(changes.contains_key(&file_uri));
+
+        let file_changes = &changes[&file_uri];
+        assert!(!file_changes.is_empty());
+
+        // Should have exactly 1 change (just the declaration)
+        assert_eq!(file_changes.len(), 1);
+
+        // The change should replace "value" with "newValue"
+        let text_edit = &file_changes[0];
+        assert_eq!(text_edit.new_text, "newValue");
+        // The range should cover "value" (5 characters)
+        let range_len = text_edit.range.end.character - text_edit.range.start.character;
+        assert_eq!(range_len, 5);
     }
 
     #[test]

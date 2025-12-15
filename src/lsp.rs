@@ -184,6 +184,7 @@ impl LanguageServer for ForgeLsp {
                 references_provider: Some(OneOf::Left(true)),
                 rename_provider: Some(OneOf::Left(true)),
                 workspace_symbol_provider: Some(OneOf::Left(true)),
+                document_symbol_provider: Some(OneOf::Left(true)),
                 text_document_sync: Some(TextDocumentSyncCapability::Kind(
                     TextDocumentSyncKind::FULL,
                 )),
@@ -846,6 +847,69 @@ impl LanguageServer for ForgeLsp {
                 )
                 .await;
             Ok(Some(all_symbols))
+        }
+    }
+
+    async fn document_symbol(
+        &self,
+        params: DocumentSymbolParams,
+    ) -> tower_lsp::jsonrpc::Result<Option<DocumentSymbolResponse>> {
+        self.client
+            .log_message(MessageType::INFO, "Got a textDocument/documentSymbol request")
+            .await;
+
+        let uri = params.text_document.uri;
+
+        // Get the file path from URI
+        let file_path = match uri.to_file_path() {
+            Ok(path) => path,
+            Err(_) => {
+                self.client
+                    .log_message(MessageType::ERROR, "Invalid file URI")
+                    .await;
+                return Ok(None);
+            }
+        };
+
+        let path_str = match file_path.to_str() {
+            Some(s) => s,
+            None => {
+                self.client
+                    .log_message(MessageType::ERROR, "Invalid file path")
+                    .await;
+                return Ok(None);
+            }
+        };
+
+        // Get AST data for this specific file
+        let ast_data = match self.compiler.ast(path_str).await {
+            Ok(data) => data,
+            Err(e) => {
+                self.client
+                    .log_message(
+                        MessageType::WARNING,
+                        format!("Failed to get AST data for document symbols: {e}"),
+                    )
+                    .await;
+                return Ok(None);
+            }
+        };
+
+        let symbols = symbols::extract_document_symbols(&ast_data, path_str);
+
+        if symbols.is_empty() {
+            self.client
+                .log_message(MessageType::INFO, "No document symbols found")
+                .await;
+            Ok(None)
+        } else {
+            self.client
+                .log_message(
+                    MessageType::INFO,
+                    format!("Found {} document symbols", symbols.len()),
+                )
+                .await;
+            Ok(Some(DocumentSymbolResponse::Nested(symbols)))
         }
     }
 
